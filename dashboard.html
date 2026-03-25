@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced Machining Capacity Intelligence</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg: #07090e;
+  --s1: #0d1017;
+  --s2: #131720;
+  --s3: #1a1f2a;
+  --border: #1e2535;
+  --border2: #252d3d;
+  --cyan: #00e5ff;
+  --orange: #ff7c2a;
+  --green: #39ff7e;
+  --red: #ff3d5a;
+  --yellow: #ffd23f;
+  --purple: #b06bff;
+  --text: #f0f4ff;
+  --muted: #b8c4d8;
+  --muted2: #d0daea;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+  min-height: 100vh;
+}
+
+/* SCANLINE OVERLAY */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.07) 2px, rgba(0,0,0,0.07) 4px);
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── HEADER ── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--s1);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.logo-area h1 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: var(--cyan);
+  text-shadow: 0 0 20px rgba(0,229,255,0.4);
+}
+.logo-area .sub {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 2.5px;
+  color: var(--muted2);
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+.header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.upload-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 16px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  color: var(--muted2);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.upload-pill:hover { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 16px rgba(0,229,255,0.15); }
+.upload-pill.active { border-color: var(--green); color: var(--green); }
+.file-tag {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.58rem;
+  color: var(--muted);
+  background: var(--s2);
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+input[type=file] { display: none; }
+
+/* ── KPI BAR ── */
+.kpi-bar {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  border-bottom: 1px solid var(--border);
+}
+.kpi {
+  padding: 18px 22px;
+  border-right: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+.kpi:last-child { border-right: none; }
+.kpi::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--kc, var(--cyan));
+  box-shadow: 0 0 10px var(--kc, var(--cyan));
+}
+.kpi-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.56rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.kpi-val {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.65rem;
+  font-weight: 600;
+  color: var(--kc, var(--cyan));
+  line-height: 1;
+}
+.kpi-unit {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.56rem;
+  color: var(--muted);
+  margin-top: 5px;
+}
+
+/* ── LAYOUT ── */
+.body { padding: 24px 32px; display: flex; flex-direction: column; gap: 22px; }
+
+/* ── SECTION HEADER ── */
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.section-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--muted2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title::before {
+  content: '';
+  width: 6px; height: 6px;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+  flex-shrink: 0;
+}
+
+/* ── OVERVIEW CHART ── */
+.card {
+  background: var(--s1);
+  border: 1px solid var(--border);
+  padding: 20px 22px;
+}
+
+/* ── WC SELECTOR ── */
+.wc-selector-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.wc-select {
+  background: var(--s2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  padding: 7px 12px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  outline: none;
+  cursor: pointer;
+  min-width: 280px;
+  transition: border-color 0.2s;
+}
+.wc-select:focus { border-color: var(--cyan); }
+.wc-select option { background: var(--s2); }
+
+.view-toggle { display: flex; gap: 0; }
+.vt-btn {
+  padding: 6px 14px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 1px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-transform: uppercase;
+  margin-left: -1px;
+}
+.vt-btn.active { background: rgba(0,229,255,0.08); border-color: var(--cyan); color: var(--cyan); z-index: 1; }
+
+/* ── DETAIL CHART ── */
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+  align-items: start;
+}
+
+/* ── STATUS TABLE ── */
+.status-table { width: 100%; border-collapse: collapse; }
+.status-table thead { background: var(--s2); }
+.status-table th {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.55rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 9px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.status-table th:hover { color: var(--cyan); }
+.status-table td {
+  padding: 8px 12px;
+  font-size: 0.72rem;
+  border-bottom: 1px solid rgba(30,37,53,0.6);
+  font-family: 'IBM Plex Mono', monospace;
+}
+.status-table tr:hover td { background: rgba(0,229,255,0.03); }
+
+.util-bar-wrap { display: flex; align-items: center; gap: 7px; }
+.util-bar { flex: 1; height: 5px; background: var(--s3); border-radius: 1px; overflow: hidden; min-width: 50px; }
+.util-bar-fill { height: 100%; border-radius: 1px; transition: width 0.6s ease; }
+.util-pct { font-size: 0.65rem; min-width: 38px; text-align: right; font-weight: 500; }
+
+.status-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px;
+  box-shadow: 0 0 5px currentColor;
+}
+
+/* ── HEATMAP ── */
+.heatmap-wrap { overflow-x: auto; }
+.heatmap-table { border-collapse: collapse; font-size: 0.62rem; min-width: 100%; }
+.heatmap-table th {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.52rem;
+  letter-spacing: 1px;
+  color: var(--muted);
+  padding: 6px 8px;
+  white-space: nowrap;
+  text-align: center;
+  border-bottom: 1px solid var(--border);
+}
+.heatmap-table th.wc-col { text-align: left; min-width: 180px; }
+.heatmap-table td {
+  padding: 5px 6px;
+  text-align: center;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.55rem;
+  border: 1px solid rgba(30,37,53,0.4);
+  cursor: pointer;
+  transition: outline 0.1s;
+  min-width: 46px;
+}
+.heatmap-table td.wc-name {
+  text-align: left;
+  color: var(--muted2);
+  font-size: 0.6rem;
+  background: var(--s1) !important;
+  white-space: nowrap;
+  padding: 5px 10px;
+  cursor: default;
+}
+.heatmap-table td:hover:not(.wc-name) { outline: 1px solid var(--cyan); z-index: 2; position: relative; }
+.heatmap-table tr:hover td.wc-name { color: var(--cyan); }
+
+/* Legend */
+.legend-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 0.58rem; color: var(--muted); }
+.legend-swatch { width: 12px; height: 12px; border-radius: 1px; }
+
+/* ── TOOLTIP ── */
+.hm-tooltip {
+  position: fixed;
+  background: var(--s1);
+  border: 1px solid var(--border2);
+  padding: 8px 12px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.65rem;
+  pointer-events: none;
+  z-index: 9998;
+  opacity: 0;
+  transition: opacity 0.15s;
+  max-width: 220px;
+  line-height: 1.7;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.hm-tooltip.show { opacity: 1; }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed;
+  bottom: 24px; right: 24px;
+  padding: 10px 18px;
+  background: var(--s1);
+  border: 1px solid var(--green);
+  color: var(--green);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem;
+  z-index: 10000;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.3s;
+  box-shadow: 0 0 24px rgba(57,255,126,0.15);
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
+@media (max-width: 1000px) {
+  .kpi-bar { grid-template-columns: repeat(3, 1fr); }
+  .detail-grid { grid-template-columns: 1fr; }
+  .body { padding: 16px; }
+  .header { padding: 14px 16px; }
+}
+
+/* ── TABS ── */
+.tab-bar {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--s1);
+  padding: 0 32px;
+  gap: 0;
+}
+.tab-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 36px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  top: 1px;
+  gap: 2px;
+}
+.tab-btn:hover .tab-year { color: var(--text); }
+.tab-btn.active { border-bottom-color: var(--tab-color, var(--cyan)); }
+.tab-btn.active .tab-year { color: var(--tab-color, var(--cyan)); text-shadow: 0 0 12px var(--tab-color, var(--cyan)); }
+.tab-btn.active .tab-sub { color: var(--muted2); }
+#tab-2026 { --tab-color: var(--cyan); }
+#tab-2027 { --tab-color: #b06bff; }
+#tab-total { --tab-color: var(--green); }
+.tab-year {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--muted);
+  transition: color 0.2s;
+}
+.tab-sub {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.5rem;
+  letter-spacing: 1.5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  transition: color 0.2s;
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo-area">
+    <h1>ADVANCED MACHINING CAPACITY INTELLIGENCE</h1>
+    <div class="sub">Work Center · Effective Capacity vs Loaded Hours · 2026 vs 2027</div>
+  </div>
+  <div class="header-actions">
+    <span class="file-tag" id="loadedFileName">Results_WC_LOADED_HOUR-TODATE.xlsx</span>
+    <button class="upload-pill" id="uploadLoadedBtn" onclick="document.getElementById('inputLoaded').click()">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Upload Loaded Hours
+    </button>
+    <span class="file-tag" id="availFileName">Production_Available_Hours.xlsx</span>
+    <button class="upload-pill" id="uploadAvailBtn" onclick="document.getElementById('inputAvail').click()">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Upload Available Hours
+    </button>
+    <input type="file" id="inputLoaded" accept=".xlsx,.xls" onchange="handleLoadedUpload(event)">
+    <input type="file" id="inputAvail" accept=".xlsx,.xls" onchange="handleAvailUpload(event)">
+  </div>
+</div>
+
+<!-- KPI BAR -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border)">
+  <div class="kpi" style="--kc:var(--cyan)">
+    <div class="kpi-label">Effective Capacity</div>
+    <div class="kpi-val" id="kpiCap26">—</div>
+    <div class="kpi-unit" id="kpiCapUnit">total hrs</div>
+  </div>
+  <div class="kpi" style="--kc:var(--orange)">
+    <div class="kpi-label">Loaded Hours</div>
+    <div class="kpi-val" id="kpiLoaded26">—</div>
+    <div class="kpi-unit">hrs scheduled</div>
+  </div>
+  <div class="kpi" style="--kc:var(--yellow)">
+    <div class="kpi-label">Utilization</div>
+    <div class="kpi-val" id="kpiUtil26">—</div>
+    <div class="kpi-unit">loaded / eff. cap</div>
+  </div>
+  <div class="kpi" style="--kc:var(--red)">
+    <div class="kpi-label">Overloaded WC-Months</div>
+    <div class="kpi-val" id="kpiOver26">—</div>
+    <div class="kpi-unit">&gt;100% utilization</div>
+  </div>
+</div>
+
+<!-- TAB BAR -->
+<div class="tab-bar">
+  <button class="tab-btn active" id="tab-2026" onclick="setTab('2026')">
+    <span class="tab-year">2026</span>
+    <span class="tab-sub">Jan – Dec</span>
+  </button>
+  <button class="tab-btn" id="tab-2027" onclick="setTab('2027')">
+    <span class="tab-year">2027</span>
+    <span class="tab-sub">Jan – Dec</span>
+  </button>
+  <button class="tab-btn" id="tab-total" onclick="setTab('total')">
+    <span class="tab-year">TOTAL</span>
+    <span class="tab-sub">2026 + 2027</span>
+  </button>
+</div>
+
+<div class="body">
+
+  <!-- OVERVIEW CHART -->
+  <div class="card">
+    <div class="section-head">
+      <div class="section-title" id="overviewTitle">Monthly Totals — All Work Centers Combined</div>
+      <div class="legend-row">
+        <div class="legend-item"><div class="legend-swatch" style="background:rgba(0,229,255,0.7)"></div> Effective Capacity</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:rgba(255,124,42,0.8)"></div> Loaded Hours</div>
+      </div>
+    </div>
+    <canvas id="overviewChart" height="90"></canvas>
+  </div>
+
+  <!-- PER-WC DETAIL -->
+  <div class="card">
+    <div class="section-head">
+      <div class="section-title">Per Work Center Monthly Detail</div>
+      <div class="wc-selector-wrap">
+        <select class="wc-select" id="wcSelect" onchange="renderDetail()"></select>
+        <div class="view-toggle">
+          <button class="vt-btn active" id="vt-bar" onclick="setView('bar')">Bar</button>
+          <button class="vt-btn" id="vt-line" onclick="setView('line')">Line</button>
+        </div>
+      </div>
+    </div>
+    <div class="detail-grid">
+      <canvas id="detailChart" height="130"></canvas>
+      <div>
+        <div class="section-title" style="margin-bottom:12px">Monthly Breakdown</div>
+        <div style="overflow-y:auto;max-height:320px">
+          <table class="status-table">
+            <thead><tr>
+              <th>Month</th>
+              <th>Eff. Cap</th>
+              <th>Loaded</th>
+              <th>Utilization</th>
+            </tr></thead>
+            <tbody id="detailTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HEATMAP -->
+  <div class="card">
+    <div class="section-head">
+      <div class="section-title" id="heatmapTitle">Utilization Heatmap — All WCs × All Months</div>
+      <div class="legend-row">
+        <div class="legend-item"><div class="legend-swatch" style="background:#1a2535"></div> No Data</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#0d3d2e"></div> 0–40%</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#1a5c32"></div> 40–70%</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#a07c00"></div> 70–90%</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#c04000"></div> 90–100%</div>
+        <div class="legend-item"><div class="legend-swatch" style="background:#8b0020"></div> &gt;100% ⚠</div>
+      </div>
+    </div>
+    <div class="heatmap-wrap">
+      <table class="heatmap-table" id="heatmapTable"></table>
+    </div>
+  </div>
+
+  <!-- SUMMARY TABLE -->
+  <div class="card">
+    <div class="section-head">
+      <div class="section-title" id="summaryTitle">Work Center Summary</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="status-table" id="summaryTable">
+        <thead id="summaryHead"></thead>
+        <tbody id="summaryBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<div class="hm-tooltip" id="hmTooltip"></div>
+
+<div class="hm-tooltip" id="hmTooltip"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════════════════════
+// DATA (pre-loaded from uploaded files)
+// ════════════════════════════════════════════════════════
+// ── DATA STATE (never re-declared, always mutated in place) ──
+const _state = {
+  avail: {"Fastems ROBO FMS One-510":{"2026-01":678.4,"2026-02":627.2,"2026-03":700.8,"2026-04":691.2,"2026-05":656.0,"2026-06":691.2,"2026-07":700.8,"2026-08":678.4,"2026-09":691.2,"2026-10":678.4,"2026-11":668.8,"2026-12":723.2,"2027-01":656.0,"2027-02":627.2,"2027-03":723.2,"2027-04":668.8,"2027-05":678.4,"2027-06":691.2,"2027-07":678.4,"2027-08":700.8,"2027-09":691.2,"2027-10":656.0,"2027-11":691.2,"2027-12":700.8},"Okuma - M460V-5AX-503":{"2026-01":406.4,"2026-02":371.2,"2026-03":412.8,"2026-04":403.2,"2026-05":400.0,"2026-06":403.2,"2026-07":412.8,"2026-08":406.4,"2026-09":403.2,"2026-10":406.4,"2026-11":396.8,"2026-12":419.2,"2027-01":400.0,"2027-02":371.2,"2027-03":419.2,"2027-04":396.8,"2027-05":406.4,"2027-06":403.2,"2027-07":406.4,"2027-08":412.8,"2027-09":403.2,"2027-10":400.0,"2027-11":403.2,"2027-12":412.8},"Okuma - M460V-5AX-508":{"2026-01":406.4,"2026-02":371.2,"2026-03":412.8,"2026-04":403.2,"2026-05":400.0,"2026-06":403.2,"2026-07":412.8,"2026-08":406.4,"2026-09":403.2,"2026-10":406.4,"2026-11":396.8,"2026-12":419.2,"2027-01":400.0,"2027-02":371.2,"2027-03":419.2,"2027-04":396.8,"2027-05":406.4,"2027-06":403.2,"2027-07":406.4,"2027-08":412.8,"2027-09":403.2,"2027-10":400.0,"2027-11":403.2,"2027-12":412.8},"Okuma - M460V-5AX-509":{"2026-01":406.4,"2026-02":371.2,"2026-03":412.8,"2026-04":403.2,"2026-05":400.0,"2026-06":403.2,"2026-07":412.8,"2026-08":406.4,"2026-09":403.2,"2026-10":406.4,"2026-11":396.8,"2026-12":419.2,"2027-01":400.0,"2027-02":371.2,"2027-03":419.2,"2027-04":396.8,"2027-05":406.4,"2027-06":403.2,"2027-07":406.4,"2027-08":412.8,"2027-09":403.2,"2027-10":400.0,"2027-11":403.2,"2027-12":412.8},"HAAS UMC-750 5 AXIS (1)-504":{"2026-01":136.0,"2026-02":128.0,"2026-03":144.0,"2026-04":144.0,"2026-05":128.0,"2026-06":144.0,"2026-07":144.0,"2026-08":136.0,"2026-09":144.0,"2026-10":136.0,"2026-11":136.0,"2026-12":152.0,"2027-01":128.0,"2027-02":128.0,"2027-03":152.0,"2027-04":136.0,"2027-05":136.0,"2027-06":144.0,"2027-07":136.0,"2027-08":144.0,"2027-09":144.0,"2027-10":128.0,"2027-11":144.0,"2027-12":144.0},"HAAS UMC-750 5 AXIS (2)-505":{"2026-01":136.0,"2026-02":128.0,"2026-03":144.0,"2026-04":144.0,"2026-05":128.0,"2026-06":144.0,"2026-07":144.0,"2026-08":136.0,"2026-09":144.0,"2026-10":136.0,"2026-11":136.0,"2026-12":152.0,"2027-01":128.0,"2027-02":128.0,"2027-03":152.0,"2027-04":136.0,"2027-05":136.0,"2027-06":144.0,"2027-07":136.0,"2027-08":144.0,"2027-09":144.0,"2027-10":128.0,"2027-11":144.0,"2027-12":144.0},"Matsura MAM72":{"2026-01":406.4,"2026-02":371.2,"2026-03":412.8,"2026-04":403.2,"2026-05":400.0,"2026-06":403.2,"2026-07":412.8,"2026-08":406.4,"2026-09":403.2,"2026-10":406.4,"2026-11":396.8,"2026-12":419.2,"2027-01":400.0,"2027-02":371.2,"2027-03":419.2,"2027-04":396.8,"2027-05":406.4,"2027-06":403.2,"2027-07":406.4,"2027-08":412.8,"2027-09":403.2,"2027-10":400.0,"2027-11":403.2,"2027-12":412.8},"Mazak - HCN-4000 II-401":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Mazak - HCN-4000 III-402":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Mazak VCN510CKY w 4AX Rotary-303":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Mazak VCN510CKY (2)-302":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Mazak VCN510CKY (1)-301":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Integrex 200-3ST-201":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Mazak Integrex 100-4ST-202":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"HYUNDAI L 2100SY-105":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Okuma- MULTUS U3000- (205)":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Okuma LB3000":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Mazak Quick Turn 10-104":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Mazak Quick Turn 250 II-102":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Mazak Quick Turn 6T-103":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Mazak QTN-250 MSY-101":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"Komo VR510 CNC Router-306":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0},"C.R. ONSRUD 5 AXIS-506":{"2026-01":110.5,"2026-02":104.0,"2026-03":117.0,"2026-04":117.0,"2026-05":104.0,"2026-06":117.0,"2026-07":117.0,"2026-08":110.5,"2026-09":117.0,"2026-10":110.5,"2026-11":110.5,"2026-12":123.5,"2027-01":104.0,"2027-02":104.0,"2027-03":123.5,"2027-04":110.5,"2027-05":110.5,"2027-06":117.0,"2027-07":110.5,"2027-08":117.0,"2027-09":117.0,"2027-10":104.0,"2027-11":117.0,"2027-12":117.0}},
+  loaded: {"C.R. ONSRUD 5 AXIS-506":{"2026-03":128.8,"2026-04":35.33},"Fastems ROBO FMS One-510":{"2026-02":2.42,"2026-03":325.37,"2026-04":673.32,"2026-05":456.37,"2026-06":415.55,"2026-07":261.99,"2026-08":534.89,"2026-09":129.07,"2026-10":240.5,"2026-11":191.06,"2026-12":97.33,"2027-02":136.98,"2027-03":73.37},"HAAS UMC-750 5 AXIS (1)-504":{"2026-02":61.83,"2026-03":170.64,"2026-04":279.16,"2026-05":24.25,"2026-06":403.25,"2026-07":210.92,"2026-08":235.17,"2026-09":97.0,"2026-10":24.25},"HAAS UMC-750 5 AXIS (2)-505":{"2026-02":186.67,"2026-03":186.67,"2026-05":373.34,"2026-08":186.67,"2026-09":1120.02,"2026-10":186.67},"HYUNDAI L 2100SY-105":{"2026-03":40.5,"2026-04":56.27,"2026-05":11.33,"2026-06":30.47,"2026-07":56.02,"2026-08":31.28},"Integrex 200-3ST-201":{"2026-03":35.92,"2026-04":51.25,"2026-05":118.0,"2026-07":168.3,"2026-08":126.62},"Komo VR510 CNC Router-306":{"2026-03":823.84,"2026-04":12.04,"2026-06":11.42,"2026-07":1.63,"2026-08":32.78,"2026-10":32.78},"Mazak - HCN-4000 II-401":{"2026-03":100.83,"2026-04":246.85,"2026-05":248.48,"2026-06":346.5,"2026-07":180.49,"2026-08":180.49,"2026-09":180.49,"2026-10":419.75,"2026-11":73.01,"2026-12":73.01,"2027-01":73.01,"2027-02":73.01,"2027-03":73.01,"2027-04":73.01,"2027-05":73.01,"2027-06":73.01,"2027-07":73.01,"2027-08":73.01,"2027-09":73.01},"Mazak - HCN-4000 III-402":{"2026-03":19.15,"2026-04":115.65,"2026-05":22.46,"2026-06":123.08,"2026-07":74.67,"2026-08":74.67,"2026-09":74.67,"2026-10":220.32,"2026-11":52.21,"2026-12":52.21,"2027-01":52.21,"2027-02":52.21,"2027-03":52.21,"2027-04":52.21,"2027-05":52.21,"2027-06":52.21,"2027-07":52.21,"2027-08":52.21,"2027-09":52.21},"Mazak FJV-250-304":{"2026-02":32.58,"2026-03":45.18},"Mazak Integrex 100-4ST-202":{"2026-03":53.73,"2026-04":137.49,"2026-05":211.34,"2026-06":70.17,"2026-07":179.67,"2026-08":47.17,"2027-02":23.25},"Mazak QTN-250 MSY-101":{"2026-02":31.34,"2026-04":35.55,"2026-05":131.11,"2026-06":218.65,"2026-08":24.3,"2026-09":69.16,"2026-10":31.81,"2026-11":44.86,"2026-12":44.86,"2027-01":24.3,"2027-02":24.3,"2027-06":20.56,"2027-07":20.56,"2027-09":20.56,"2027-11":3.67,"2028-08":20.56},"Mazak Quick Turn 10-104":{"2026-02":0.0,"2026-03":10.58,"2026-04":8.38,"2026-05":24.24,"2026-06":251.21,"2026-07":3.99,"2026-08":127.66,"2026-09":22.66,"2026-11":8.5,"2026-12":20.83,"2027-02":5.38,"2027-04":6.42},"Mazak Quick Turn 250 II-102":{"2026-04":59.24,"2026-05":57.48,"2026-06":29.47,"2026-07":21.83,"2026-09":29.47,"2027-02":17.08},"Mazak Quick Turn 6T-103":{"2026-03":116.91,"2026-04":123.41,"2026-05":43.31,"2026-06":484.1,"2026-07":134.84,"2026-08":141.93,"2026-09":74.75,"2027-05":25.41,"2027-10":41.38,"2027-11":25.41},"Mazak VCN510CKY (1)-301":{"2026-02":6.59,"2026-03":97.59,"2026-04":85.6,"2026-05":151.72,"2026-06":193.11,"2026-07":443.73,"2026-08":122.57,"2026-09":119.75,"2026-10":109.03,"2026-11":114.08,"2026-12":113.39,"2027-01":106.0,"2027-03":219.39},"Mazak VCN510CKY (2)-302":{"2026-04":216.35,"2026-05":127.01,"2026-06":43.75,"2026-07":125.36,"2026-08":74.3,"2026-09":100.02,"2026-11":85.73},"Mazak VCN510CKY w 4AX Rotary-303":{"2026-03":111.08,"2026-04":81.29,"2026-05":109.99,"2026-06":51.62,"2026-07":97.9,"2026-08":50.25,"2026-09":10.23,"2026-10":40.36,"2026-11":8.77,"2026-12":1.53,"2027-01":3.37,"2027-02":16.16,"2027-03":44.96,"2027-06":29.75,"2027-07":22.18,"2027-10":29.75,"2027-11":3.7},"Okuma - M460V-5AX-503":{"2026-03":47.11,"2026-04":423.65,"2026-05":375.31,"2026-06":213.35,"2026-07":135.27,"2026-08":70.76,"2026-09":26.06,"2026-10":56.89,"2027-01":45.46,"2027-03":79.55,"2027-06":81.83,"2027-10":81.83},"Okuma - M460V-5AX-508":{"2026-03":70.5,"2026-04":274.25,"2026-05":431.0,"2026-06":395.17,"2026-07":288.67,"2026-09":82.0,"2026-10":96.1},"Okuma - M460V-5AX-509":{"2026-05":105.8,"2026-06":175.66,"2026-07":203.17,"2026-08":169.91,"2026-09":91.2,"2026-10":168.97,"2026-11":337.94},"Okuma- MULTUS U3000- (205)":{"2026-04":34.23,"2026-05":117.33,"2026-08":15.9,"2026-09":167.85,"2026-10":8.08,"2026-11":23.98,"2026-12":23.98,"2027-01":15.9,"2027-02":15.9,"2027-06":8.08,"2027-07":8.08,"2027-09":8.08,"2028-08":8.08}}
+};
+
+// Accessor aliases — all code reads these; uploads write to _state directly
+function getAvailData() { return _state.avail; }
+function getLoadedData() { return _state.loaded; }
+
+
+// Months to display (2026-01 → 2027-12)
+// DISPLAY_MONTHS kept as alias for MONTHS_ALL
+
+function monthLabel(m) {
+  const [y, mo] = m.split('-');
+  const names = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return names[parseInt(mo)] + " '" + y.slice(2);
+}
+
+let chartOverview = null, chartDetail = null;
+let detailView = 'bar';
+let summarySort = { col: 'u', dir: -1 };
+let activeTab = '2026';
+
+const MONTHS_2026 = ["2026-01","2026-02","2026-03","2026-04","2026-05","2026-06","2026-07","2026-08","2026-09","2026-10","2026-11","2026-12"];
+const MONTHS_2027 = ["2027-01","2027-02","2027-03","2027-04","2027-05","2027-06","2027-07","2027-08","2027-09","2027-10","2027-11","2027-12"];
+const MONTHS_ALL  = [...MONTHS_2026, ...MONTHS_2027];
+
+function tabMonths() {
+  if (activeTab === '2026') return MONTHS_2026;
+  if (activeTab === '2027') return MONTHS_2027;
+  return MONTHS_ALL;
+}
+function tabColor() {
+  if (activeTab === '2026') return { main:'#00e5ff', bar:'rgba(0,229,255,0.18)', barBorder:'rgba(0,229,255,0.6)' };
+  if (activeTab === '2027') return { main:'#b06bff', bar:'rgba(176,107,255,0.15)', barBorder:'rgba(176,107,255,0.6)' };
+  return { main:'#39ff7e', bar:'rgba(57,255,126,0.12)', barBorder:'rgba(57,255,126,0.5)' };
+}
+
+// ── HELPERS ──────────────────────────────────────────────
+function allWCs() {
+  return [...new Set([...Object.keys(_state.avail), ...Object.keys(_state.loaded)])].sort();
+}
+function getAvail(wc, mo) { return (_state.avail[wc] && _state.avail[wc][mo]) || 0; }
+function getLoaded(wc, mo) { return (_state.loaded[wc] && _state.loaded[wc][mo]) || 0; }
+function util(wc, mo) {
+  const a = getAvail(wc, mo), l = getLoaded(wc, mo);
+  return a > 0 ? l / a : null;
+}
+function utilColor(u) {
+  if (u === null) return 'rgba(26,37,53,1)';
+  if (u > 1.0)   return 'rgba(139,0,32,1)';
+  if (u > 0.9)   return 'rgba(192,64,0,1)';
+  if (u > 0.7)   return 'rgba(160,124,0,1)';
+  if (u > 0.4)   return 'rgba(26,92,50,1)';
+  return 'rgba(13,61,46,1)';
+}
+function utilTextColor(u) {
+  if (u === null) return '#2a3345';
+  if (u > 1.0)   return '#ff8090';
+  if (u > 0.9)   return '#ff9a60';
+  if (u > 0.7)   return '#ffd23f';
+  if (u > 0.4)   return '#39ff7e';
+  return '#3db86a';
+}
+function monthLabel(m) {
+  const [y, mo] = m.split('-');
+  const names = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return names[parseInt(mo)] + " '" + y.slice(2);
+}
+
+// ── TAB SWITCHING ─────────────────────────────────────────
+function setTab(tab) {
+  activeTab = tab;
+  ['2026','2027','total'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
+  });
+  rebuildAll();
+}
+
+// ── KPIs ─────────────────────────────────────────────────
+function updateKPIs() {
+  const wcs = allWCs();
+  const months = tabMonths();
+  let cap = 0, ld = 0, over = 0;
+  wcs.forEach(wc => {
+    months.forEach(mo => {
+      cap += getAvail(wc, mo);
+      ld  += getLoaded(wc, mo);
+      const u = util(wc, mo);
+      if (u !== null && u > 1.0) over++;
+    });
+  });
+  const utilPct = cap > 0 ? (ld / cap * 100) : 0;
+  const tc = tabColor().main;
+  const label = activeTab === 'total' ? '2026 + 2027' : activeTab;
+
+  document.getElementById('kpiCap26').textContent    = Math.round(cap).toLocaleString();
+  document.getElementById('kpiLoaded26').textContent = Math.round(ld).toLocaleString();
+  document.getElementById('kpiUtil26').textContent   = utilPct.toFixed(1) + '%';
+  document.getElementById('kpiOver26').textContent   = over;
+
+  // Sync year label strips
+  const strip26 = document.querySelector('[data-kpi-strip="left"]');
+  const strip27 = document.querySelector('[data-kpi-strip="right"]');
+  if (strip26 && strip27) {
+    if (activeTab === 'total') {
+      strip26.textContent = '▶ 2026 + 2027 COMBINED';
+      strip26.style.color = tc;
+      strip26.style.background = `rgba(57,255,126,0.05)`;
+      strip27.parentElement.style.display = 'none';
+    } else if (activeTab === '2026') {
+      strip26.textContent = '▶ 2026';
+      strip26.style.color = 'var(--cyan)';
+      strip26.style.background = 'rgba(0,229,255,0.05)';
+      strip27.parentElement.style.display = 'none';
+    } else {
+      strip26.textContent = '▶ 2027';
+      strip26.style.color = '#b06bff';
+      strip26.style.background = 'rgba(176,107,255,0.05)';
+      strip27.parentElement.style.display = 'none';
+    }
+  }
+}
+
+// ── OVERVIEW CHART ────────────────────────────────────────
+function renderOverview() {
+  const months = tabMonths();
+  const wcs = allWCs();
+  const capArr = months.map(mo => wcs.reduce((s,wc) => s + getAvail(wc,mo), 0));
+  const ldArr  = months.map(mo => wcs.reduce((s,wc) => s + getLoaded(wc,mo), 0));
+  const labels = months.map(monthLabel);
+  const tc = tabColor();
+
+  // For "total" tab, color-code 2026 vs 2027 differently
+  const barBg     = activeTab === 'total'
+    ? months.map(m => m.startsWith('2026') ? 'rgba(0,229,255,0.18)' : 'rgba(176,107,255,0.15)')
+    : months.map(() => tc.bar);
+  const barBorder = activeTab === 'total'
+    ? months.map(m => m.startsWith('2026') ? 'rgba(0,229,255,0.6)' : 'rgba(176,107,255,0.6)')
+    : months.map(() => tc.barBorder);
+
+  const yearSepPlugin = {
+    id: 'yearSep',
+    afterDraw(chart) {
+      if (activeTab !== 'total') return;
+      const { ctx: c, scales: { x, y } } = chart;
+      const x0 = x.getPixelForValue(11), x1 = x.getPixelForValue(12);
+      const xMid = (x0 + x1) / 2;
+      c.save();
+      c.strokeStyle = 'rgba(176,107,255,0.5)';
+      c.lineWidth = 1.5;
+      c.setLineDash([4, 3]);
+      c.beginPath(); c.moveTo(xMid, y.top); c.lineTo(xMid, y.bottom); c.stroke();
+      c.setLineDash([]);
+      c.fillStyle = 'rgba(0,229,255,0.85)'; c.font = "bold 9px 'IBM Plex Mono'"; c.textAlign = 'right';
+      c.fillText('◀ 2026', xMid - 6, y.top + 14);
+      c.fillStyle = 'rgba(176,107,255,0.85)'; c.textAlign = 'left';
+      c.fillText('2027 ▶', xMid + 6, y.top + 14);
+      c.restore();
+    }
+  };
+
+  const titles = { '2026': '2026 Monthly Totals — All Work Centers', '2027': '2027 Monthly Totals — All Work Centers', 'total': '2026 + 2027 Combined — All Work Centers' };
+  document.getElementById('overviewTitle').textContent = titles[activeTab];
+
+  const ctx = document.getElementById('overviewChart').getContext('2d');
+  if (chartOverview) chartOverview.destroy();
+  chartOverview = new Chart(ctx, {
+    data: {
+      labels,
+      datasets: [
+        { type:'bar', label:'Effective Capacity', data:capArr, backgroundColor:barBg, borderColor:barBorder, borderWidth:1, borderRadius:2, order:2 },
+        { type:'line', label:'Loaded Hours', data:ldArr, borderColor:'#ff7c2a', backgroundColor:'rgba(255,124,42,0.06)', borderWidth:2,
+          pointRadius:3, pointBackgroundColor:ldArr.map((l,i)=>l>capArr[i]?'#ff3d5a':'#ff7c2a'), tension:0.3, fill:true, order:1 }
+      ]
+    },
+    options: {
+      responsive: true,
+      layout: { padding: { top: activeTab === 'total' ? 20 : 8 } },
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { display:false },
+        tooltip: {
+          backgroundColor:'#0d1017', borderColor:'#252d3d', borderWidth:1,
+          titleFont:{ family:"'IBM Plex Mono'", size:10 }, bodyFont:{ family:"'IBM Plex Mono'", size:10 },
+          callbacks: {
+            title: items => {
+              const yr = months[items[0].dataIndex].startsWith('2026') ? '2026' : '2027';
+              return activeTab === 'total' ? `${items[0].label}  [${yr}]` : items[0].label;
+            },
+            afterBody: items => {
+              const cap = items[0].parsed.y, ld = items[1]?.parsed.y;
+              if (cap && ld != null) return [`Utilization: ${(ld/cap*100).toFixed(1)}%`];
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid:{color:'rgba(30,37,53,0.6)'}, ticks:{font:{size:9,family:"'IBM Plex Mono'"},color:'#c0cce0'} },
+        y: { grid:{color:'rgba(30,37,53,0.6)'}, ticks:{font:{size:9,family:"'IBM Plex Mono'"},color:'#c0cce0',callback:v=>v.toLocaleString()} }
+      }
+    },
+    plugins: [yearSepPlugin]
+  });
+}
+
+// ── WC SELECTOR ──────────────────────────────────────────
+function populateSelector() {
+  const sel = document.getElementById('wcSelect');
+  const prev = sel.value;
+  sel.innerHTML = allWCs().map(w => `<option value="${w}"${w===prev?' selected':''}>${w}</option>`).join('');
+}
+
+function setView(v) {
+  detailView = v;
+  document.getElementById('vt-bar').classList.toggle('active', v === 'bar');
+  document.getElementById('vt-line').classList.toggle('active', v === 'line');
+  renderDetail();
+}
+
+// ── DETAIL CHART ──────────────────────────────────────────
+function renderDetail() {
+  const wc = document.getElementById('wcSelect').value;
+  if (!wc) return;
+  const months = tabMonths();
+  const labels  = months.map(monthLabel);
+  const capArr  = months.map(mo => getAvail(wc, mo));
+  const ldArr   = months.map(mo => getLoaded(wc, mo));
+  const tc = tabColor();
+
+  const ctx = document.getElementById('detailChart').getContext('2d');
+  if (chartDetail) chartDetail.destroy();
+
+  const ds = detailView === 'bar' ? [
+    { type:'bar', label:'Effective Capacity', data:capArr, backgroundColor:tc.bar, borderColor:tc.barBorder, borderWidth:1, borderRadius:2, order:2 },
+    { type:'bar', label:'Loaded Hours', data:ldArr,
+      backgroundColor:ldArr.map((l,i)=>l>capArr[i]?'rgba(255,61,90,0.6)':'rgba(255,124,42,0.55)'),
+      borderColor:ldArr.map((l,i)=>l>capArr[i]?'#ff3d5a':'#ff7c2a'), borderWidth:1, borderRadius:2, order:1 }
+  ] : [
+    { type:'line', label:'Effective Capacity', data:capArr, borderColor:tc.main, backgroundColor:tc.bar, borderWidth:1.5, pointRadius:2, tension:0.3, fill:true, order:2 },
+    { type:'line', label:'Loaded Hours', data:ldArr, borderColor:'#ff7c2a', backgroundColor:'rgba(255,124,42,0.05)', borderWidth:2,
+      pointRadius:ldArr.map((l,i)=>l>capArr[i]?5:2), pointBackgroundColor:ldArr.map((l,i)=>l>capArr[i]?'#ff3d5a':'#ff7c2a'), tension:0.3, fill:true, order:1 }
+  ];
+
+  chartDetail = new Chart(ctx, {
+    data: { labels, datasets: ds },
+    options: {
+      responsive:true, interaction:{mode:'index',intersect:false},
+      plugins: {
+        legend:{display:false},
+        tooltip: {
+          backgroundColor:'#0d1017', borderColor:'#252d3d', borderWidth:1,
+          titleFont:{family:"'IBM Plex Mono'",size:10}, bodyFont:{family:"'IBM Plex Mono'",size:10},
+          callbacks: { afterBody: items => {
+            const cap=items[0]?.parsed.y, ld=items[1]?.parsed.y;
+            if(cap>0&&ld!=null){const u=ld/cap*100;return[`Utilization: ${u.toFixed(1)}%${u>100?' ⚠ OVERLOADED':''}`];}
+          }}
+        }
+      },
+      scales: {
+        x:{grid:{color:'rgba(30,37,53,0.6)'},ticks:{font:{size:9,family:"'IBM Plex Mono'"},color:'#c0cce0'}},
+        y:{grid:{color:'rgba(30,37,53,0.6)'},ticks:{font:{size:9,family:"'IBM Plex Mono'"},color:'#c0cce0',callback:v=>v.toLocaleString()}}
+      }
+    }
+  });
+
+  // Side table
+  const tbody = document.getElementById('detailTable');
+  tbody.innerHTML = months.map(mo => {
+    const cap = getAvail(wc,mo), ld = getLoaded(wc,mo);
+    const u = cap > 0 ? ld/cap : null;
+    const uPct = u !== null ? (u*100).toFixed(1)+'%' : '—';
+    const tc2 = utilTextColor(u);
+    return `<tr>
+      <td style="color:var(--muted2)">${monthLabel(mo)}</td>
+      <td style="color:var(--cyan)">${cap>0?cap.toFixed(1):'—'}</td>
+      <td style="color:${ld>cap&&cap>0?'var(--red)':'var(--orange)'}">${ld>0?ld.toFixed(1):'—'}</td>
+      <td><span style="color:${tc2};font-weight:500">${uPct}</span>${u!==null&&u>1?' <span style="color:var(--red)">⚠</span>':''}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── HEATMAP ───────────────────────────────────────────────
+function renderHeatmap() {
+  const wcs = allWCs();
+  const months = tabMonths();
+  const tooltip = document.getElementById('hmTooltip');
+  const titles = { '2026':'Utilization Heatmap — 2026', '2027':'Utilization Heatmap — 2027', 'total':'Utilization Heatmap — 2026 + 2027' };
+  document.getElementById('heatmapTitle').textContent = titles[activeTab];
+
+  let html = '<thead><tr><th class="wc-col">Work Center</th>';
+  months.forEach(m => { html += `<th>${monthLabel(m)}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  wcs.forEach(wc => {
+    html += `<tr><td class="wc-name">${wc}</td>`;
+    months.forEach(mo => {
+      const cap = getAvail(wc,mo), ld = getLoaded(wc,mo);
+      const u = cap > 0 ? ld/cap : null;
+      const bg = utilColor(u);
+      const tc2 = utilTextColor(u);
+      const txt = u !== null ? (u*100).toFixed(0)+'%' : '';
+      html += `<td style="background:${bg};color:${tc2}" data-wc="${wc}" data-mo="${mo}" data-cap="${cap}" data-ld="${ld}" data-u="${u!==null?(u*100).toFixed(1):'N/A'}" onmouseenter="showHMTip(event)" onmouseleave="hideHMTip()" onclick="selectWC('${wc}')">${txt}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  document.getElementById('heatmapTable').innerHTML = html;
+
+  document.querySelectorAll('.heatmap-table td[data-wc]').forEach(td => {
+    td.addEventListener('mouseenter', showHMTip);
+    td.addEventListener('mouseleave', hideHMTip);
+  });
+}
+
+function showHMTip(e) {
+  const d = e.target.dataset;
+  if (!d.wc) return;
+  const over = parseFloat(d.u) > 100;
+  const tooltip = document.getElementById('hmTooltip');
+  tooltip.innerHTML = `<b style="color:var(--cyan)">${d.wc}</b><br>${monthLabel(d.mo)}<br>Capacity: ${parseFloat(d.cap).toFixed(1)} hrs<br>Loaded: ${parseFloat(d.ld).toFixed(1)} hrs<br>Util: <b style="color:${over?'var(--red)':'var(--green)'}">${d.u}%${over?' ⚠':''}</b>`;
+  tooltip.style.left = (e.clientX + 14) + 'px';
+  tooltip.style.top  = (e.clientY - 10) + 'px';
+  tooltip.classList.add('show');
+}
+function hideHMTip() { document.getElementById('hmTooltip').classList.remove('show'); }
+
+function selectWC(wc) {
+  document.getElementById('wcSelect').value = wc;
+  renderDetail();
+  document.getElementById('wcSelect').scrollIntoView({ behavior:'smooth', block:'center' });
+}
+
+// ── SUMMARY TABLE ─────────────────────────────────────────
+function renderSummary() {
+  const wcs = allWCs();
+  const months = tabMonths();
+  const label = activeTab === 'total' ? '2026 + 2027' : activeTab;
+  const tc = tabColor().main;
+
+  // Update title
+  document.getElementById('summaryTitle').textContent = `Work Center Summary — ${label}`;
+
+  // Build header
+  document.getElementById('summaryHead').innerHTML = `<tr>
+    <th onclick="sortSummary('wc')" style="color:var(--muted2)">Work Center ↕</th>
+    <th onclick="sortSummary('cap')" style="color:${tc}">Eff. Capacity ↕</th>
+    <th onclick="sortSummary('ld')"  style="color:${tc}">Loaded Hrs ↕</th>
+    <th onclick="sortSummary('u')"   style="color:${tc}">Utilization ↕</th>
+    <th onclick="sortSummary('over')" style="color:var(--red)">Overloaded Months ↕</th>
+  </tr>`;
+
+  let rows = wcs.map(wc => {
+    let cap=0, ld=0, over=0;
+    months.forEach(mo => {
+      cap += getAvail(wc,mo);
+      ld  += getLoaded(wc,mo);
+      const u = util(wc,mo);
+      if (u !== null && u > 1.0) over++;
+    });
+    const u = cap > 0 ? ld/cap : 0;
+    return { wc, cap, ld, u, over };
+  });
+
+  const { col, dir } = summarySort;
+  rows.sort((a,b) => {
+    const va = col === 'wc' ? a.wc : a[col];
+    const vb = col === 'wc' ? b.wc : b[col];
+    return (va > vb ? 1 : va < vb ? -1 : 0) * dir;
+  });
+
+  const tbody = document.getElementById('summaryBody');
+  tbody.innerHTML = rows.map(r => {
+    const txtColor = utilTextColor(r.u);
+    const pct   = (r.u * 100).toFixed(1);
+    const barW  = Math.min(r.u * 100, 100).toFixed(1);
+    const barC  = r.u > 1 ? 'var(--red)' : r.u > 0.9 ? 'var(--orange)' : r.u > 0.7 ? 'var(--yellow)' : 'var(--green)';
+    return `<tr onclick="selectWC('${r.wc}')" style="cursor:pointer">
+      <td style="color:var(--muted2);font-size:0.72rem">${r.wc}</td>
+      <td style="color:${tc}">${Math.round(r.cap).toLocaleString()}</td>
+      <td style="color:${r.ld>r.cap?'var(--red)':'var(--orange)'}">${Math.round(r.ld).toLocaleString()}</td>
+      <td>
+        <div class="util-bar-wrap">
+          <div class="util-bar"><div class="util-bar-fill" style="width:${barW}%;background:${barC};box-shadow:0 0 5px ${barC}"></div></div>
+          <span class="util-pct" style="color:${txtColor}">${pct}%${r.u>1?' ⚠':''}</span>
+        </div>
+      </td>
+      <td style="color:${r.over>0?'var(--red)':'var(--muted)'}">
+        ${r.over>0?`<span class="status-dot" style="color:var(--red)">●</span>${r.over}`:'<span style="color:var(--muted)">—</span>'}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function sortSummary(col) {
+  if (summarySort.col === col) summarySort.dir *= -1;
+  else { summarySort.col = col; summarySort.dir = -1; }
+  renderSummary();
+}
+
+// ── FILE UPLOAD HANDLERS ──────────────────────────────────
+function handleLoadedUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('loadedFileName').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { defval:null });
+      const keys = Object.keys(raw[0] || {});
+      const findCol = (...ns) => keys.find(k => ns.some(n => k.toLowerCase().includes(n.toLowerCase())));
+      const wcCol = findCol('Work Center','workcenter','WC');
+      const hrCol = findCol('Loaded Hours','loaded hours','hours');
+      const dtCol = findCol('Must Leave','Leave By','due date','Due');
+      if (!wcCol || !hrCol) { showToast('⚠ Could not find required columns'); return; }
+      const newData = {};
+      raw.forEach(row => {
+        const wc = row[wcCol]; const hrs = parseFloat(row[hrCol]) || 0;
+        if (!wc || !hrs) return;
+        let mo = null;
+        if (dtCol && row[dtCol]) {
+          const d = row[dtCol] instanceof Date ? row[dtCol] : new Date(row[dtCol]);
+          if (!isNaN(d)) mo = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        }
+        if (!mo) return;
+        if (!newData[wc]) newData[wc] = {};
+        newData[wc][mo] = (newData[wc][mo] || 0) + hrs;
+      });
+      Object.keys(_state.loaded).forEach(k => delete _state.loaded[k]); Object.assign(_state.loaded, newData);
+      rebuildAll();
+      document.getElementById('uploadLoadedBtn').classList.add('active');
+      showToast(`✓ Loaded ${raw.length.toLocaleString()} rows from ${file.name} — saving...`);
+      saveToServer().then(() => showToast(`✓ Saved to server — data will persist after refresh`));
+    } catch(err) { showToast('⚠ ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value = '';
+}
+
+function handleAvailUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('availFileName').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      const ws = wb.Sheets['Raw Data'] || wb.Sheets[wb.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json(ws, { defval:null });
+      const newAvail = {};
+      const moMap = {'Jan':'01','Feb':'02','Mar':'03','Apr':'04','May':'05','Jun':'06','Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'};
+      raw.forEach(row => {
+        const wc = row['Work Center']; if (!wc) return;
+        newAvail[wc] = {};
+        Object.keys(row).forEach(col => {
+          const m = col.match(/Effective Capacity-(\w+)\s+(\d+)/i);
+          if (m) {
+            const mo = moMap[m[1]]; const yr = '20'+m[2];
+            if (mo) newAvail[wc][`${yr}-${mo}`] = parseFloat(row[col]) || 0;
+          }
+        });
+      });
+      Object.keys(_state.avail).forEach(k => delete _state.avail[k]); Object.assign(_state.avail, newAvail);
+      rebuildAll();
+      document.getElementById('uploadAvailBtn').classList.add('active');
+      showToast(`✓ Loaded available hours from ${file.name} — saving...`);
+      saveToServer().then(() => showToast(`✓ Saved to server — data will persist after refresh`));
+    } catch(err) { showToast('⚠ ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+  event.target.value = '';
+}
+
+function rebuildAll() {
+  updateKPIs();
+  renderOverview();
+  populateSelector();
+  renderDetail();
+  renderHeatmap();
+  renderSummary();
+}
+
+// ── PERSIST to server ──────────────────────────────────────
+async function saveToServer() {
+  try {
+    const res = await fetch('/api/capacity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ avail: _state.avail, loaded: _state.loaded })
+    });
+    if (!res.ok) throw new Error('Server responded ' + res.status);
+  } catch(e) {
+    console.warn('Could not save to server:', e.message);
+    // Non-fatal — data still updated in memory, just won't survive a refresh
+  }
+}
+
+// ── LOAD from server on init ───────────────────────────────
+async function loadFromServer() {
+  try {
+    const res = await fetch('/api/capacity');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const saved = await res.json();
+    if (saved && saved.avail && saved.loaded) {
+      // Overwrite defaults with saved data
+      Object.keys(_state.avail).forEach(k => delete _state.avail[k]);
+      Object.assign(_state.avail, saved.avail);
+      Object.keys(_state.loaded).forEach(k => delete _state.loaded[k]);
+      Object.assign(_state.loaded, saved.loaded);
+      console.log('Loaded persisted capacity data from server.');
+    } else {
+      console.log('No saved capacity data on server — using defaults.');
+    }
+  } catch(e) {
+    console.warn('Could not reach server, using defaults:', e.message);
+  }
+  rebuildAll();
+}
+
+// ── WebSocket: receive live updates from other clients ─────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}`);
+  ws.onmessage = ({ data }) => {
+    try {
+      const msg = JSON.parse(data);
+      if (msg.type === 'capacity_update') {
+        Object.keys(_state.avail).forEach(k => delete _state.avail[k]);
+        Object.assign(_state.avail, msg.avail);
+        Object.keys(_state.loaded).forEach(k => delete _state.loaded[k]);
+        Object.assign(_state.loaded, msg.loaded);
+        rebuildAll();
+        showToast('↻ Data updated from another client');
+      }
+      if (msg.type === 'capacity_reset') {
+        showToast('⚠ Capacity data was reset by another client');
+      }
+    } catch {}
+  };
+  ws.onclose = () => setTimeout(connectWS, 3000); // auto-reconnect
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ── CHART DEFAULTS ────────────────────────────────────────
+Chart.defaults.color = '#c0cce0';
+Chart.defaults.borderColor = '#1e2535';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+
+// ── INIT: load from server first, then render ─────────────
+loadFromServer();
+// Connect WebSocket for live multi-client sync (non-fatal if no server)
+try { connectWS(); } catch(e) {}
+
+</script>
+</body>
+</html>
