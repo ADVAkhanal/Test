@@ -1200,13 +1200,20 @@ function handleLoadedUpload(event) {
       const raw = XLSX.utils.sheet_to_json(ws, { defval:null });
       if (!raw.length) { showToast('⚠ No rows found in file'); return; }
       const keys = Object.keys(raw[0] || {});
-      const findCol = (...ns) => keys.find(k => ns.some(n => k.toLowerCase().includes(n.toLowerCase())));
-      const wcCol = findCol('Work Center','workcenter','WC');
-      const hrCol = findCol('Loaded Hours','loaded hours','hours','qty');
-      const dtCol = findCol('Must Leave','Leave By','due date','Due','date','month');
-      if (!wcCol) { showToast('⚠ Cannot find Work Center column'); return; }
-      if (!hrCol) { showToast('⚠ Cannot find Hours column'); return; }
-      if (!dtCol) { showToast('⚠ Cannot find Date column — rows need a date to assign to months'); return; }
+      // Find Work Center column
+      const wcCol = keys.find(k => ['work center','workcenter'].some(n => k.toLowerCase().includes(n)));
+      // Find hours column: must contain 'hours' but NOT be setup-time or qty column
+      const hrCol = keys.find(k => {
+        const kl = k.toLowerCase();
+        return kl.includes('hours') && !kl.includes('set') && !kl.includes('qty');
+      });
+      // Find date column: prefer "Must Leave" / "Leave By" — never fall back to Cust. Due
+      const dtCol = keys.find(k => ['must leave','leave by','wo must'].some(n => k.toLowerCase().includes(n)));
+      if (!wcCol) { showToast('\u26a0 Cannot find Work Center column. Columns: ' + keys.join(', ')); return; }
+      if (!hrCol) { showToast('\u26a0 Cannot find Hours column. Columns: ' + keys.join(', ')); return; }
+      if (!dtCol) { showToast('\u26a0 Cannot find date column (need "WO Must Leave By"). Columns: ' + keys.join(', ')); return; }
+      // Debug: log exactly which columns were resolved
+      console.log('[LoadedUpload] WC col:', wcCol, '| Hrs col:', hrCol, '| Date col:', dtCol);
       const newData = {};
       let rowsImported = 0;
       raw.forEach(row => {
