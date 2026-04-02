@@ -66,9 +66,9 @@ async function loadFromServer() {
         Object.assign(_state.loaded, loaded);
 
         rebuildAll();
-        showToast("✓ Data loaded from database");
-
-    } catch (e) {
+        function showToast(msg) {
+    console.log(msg);
+} catch (e) {
         console.error("Load error:", e);
     }
 }
