@@ -33,32 +33,96 @@
         const MONTHS_2027 = ["2027-01","2027-02","2027-03","2027-04","2027-05","2027-06","2027-07","2027-08","2027-09","2027-10","2027-11","2027-12"];
         const MONTHS_ALL  = [...MONTHS_2026, ...MONTHS_2027];
 
-        // 1. PERSISTENCE LOGIC: Get data from PostgreSQL
-        async function loadFromServer() {
-            try {
-                showToast("Syncing with Database...");
-                const res = await fetch('/api/datasets');
-                const datasets = await res.json();
-                if (datasets.length > 0) {
-                    const detail = await fetch(`/api/datasets/${datasets[0].id}`);
-                    const data = await detail.json();
-                    
-                    // Map database results back to the dashboard format
-                    _state.avail = {}; _state.loaded = {};
-                    data.workcenters.forEach(wc => {
-                        _state.avail[wc.wc] = {};
-                        _state.loaded[wc.wc] = {};
-                        wc.months.forEach((m, idx) => {
-                            const moLabel = MONTHS_ALL[idx];
-                            _state.avail[wc.wc][moLabel] = m.cap;
-                            _state.loaded[wc.wc][moLabel] = m.load;
-                        });
-                    });
-                    rebuildAll();
-                    showToast("Database Sync Complete");
-                }
-            } catch(e) { console.error("Sync error:", e); }
+        // 1. LOAD DATA FROM DATABASE
+async function loadFromServer() {
+    try {
+        const res = await fetch('/api/datasets/latest/data');
+        const data = await res.json();
+
+        if (!data || !data.wcs || !data.wcs.length) {
+            console.warn("No dataset found");
+            return;
         }
+
+        const avail = {};
+        const loaded = {};
+
+        data.wcs.forEach(wc => {
+            avail[wc.wc] = {};
+            loaded[wc.wc] = {};
+
+            wc.months.forEach(m => {
+                const key = convertLabelToISO(m.label);
+                avail[wc.wc][key] = m.cap;
+                loaded[wc.wc][key] = m.load;
+            });
+        });
+
+        // overwrite state
+        Object.keys(_state.avail).forEach(k => delete _state.avail[k]);
+        Object.assign(_state.avail, avail);
+
+        Object.keys(_state.loaded).forEach(k => delete _state.loaded[k]);
+        Object.assign(_state.loaded, loaded);
+
+        rebuildAll();
+        showToast("✓ Data loaded from database");
+
+    } catch (e) {
+        console.error("Load error:", e);
+    }
+}
+
+// Helper (KEEP THIS BELOW loadFromServer)
+// 1. LOAD DATA FROM DATABASE
+async function loadFromServer() {
+    try {
+        const res = await fetch('/api/datasets/latest/data');
+        const data = await res.json();
+
+        if (!data || !data.wcs || !data.wcs.length) {
+            console.warn("No dataset found");
+            return;
+        }
+
+        const avail = {};
+        const loaded = {};
+
+        data.wcs.forEach(wc => {
+            avail[wc.wc] = {};
+            loaded[wc.wc] = {};
+
+            wc.months.forEach(m => {
+                const key = convertLabelToISO(m.label);
+                avail[wc.wc][key] = m.cap;
+                loaded[wc.wc][key] = m.load;
+            });
+        });
+
+        // overwrite state
+        Object.keys(_state.avail).forEach(k => delete _state.avail[k]);
+        Object.assign(_state.avail, avail);
+
+        Object.keys(_state.loaded).forEach(k => delete _state.loaded[k]);
+        Object.assign(_state.loaded, loaded);
+
+        rebuildAll();
+        showToast("✓ Data loaded from database");
+
+    } catch (e) {
+        console.error("Load error:", e);
+    }
+}
+
+// Helper (KEEP THIS BELOW loadFromServer)
+function convertLabelToISO(label) {
+    const [mon, yr] = label.split(' ');
+    const months = {
+        Jan:'01', Feb:'02', Mar:'03', Apr:'04', May:'05', Jun:'06',
+        Jul:'07', Aug:'08', Sep:'09', Oct:'10', Nov:'11', Dec:'12'
+    };
+    return `20${yr}-${months[mon]}`;
+}
 
         // 2. UPLOAD LOGIC: Send files to your server.js API
         async function handleLoadedUpload(event) {
