@@ -75,29 +75,6 @@ async function loadFromServer() {
 
 // Helper (KEEP THIS BELOW loadFromServer)
 // 1. LOAD DATA FROM DATABASE
-async function loadFromServer() {
-    try {
-        const res = await fetch('/api/datasets/latest/data');
-        const data = await res.json();
-
-        if (!data || !data.wcs || !data.wcs.length) {
-            console.warn("No dataset found");
-            return;
-        }
-
-        const avail = {};
-        const loaded = {};
-
-        data.wcs.forEach(wc => {
-            avail[wc.wc] = {};
-            loaded[wc.wc] = {};
-
-            wc.months.forEach(m => {
-                const key = convertLabelToISO(m.label);
-                avail[wc.wc][key] = m.cap;
-                loaded[wc.wc][key] = m.load;
-            });
-        });
 
         // overwrite state
         Object.keys(_state.avail).forEach(k => delete _state.avail[k]);
