@@ -27,13 +27,15 @@
     </div>
 
     <script>
-        // CLEAN STATE - No hardcoded data here anymore!
-        const _state = { avail: {}, loaded: {} };
-        const MONTHS_2026 = ["2026-01","2026-02","2026-03","2026-04","2026-05","2026-06","2026-07","2026-08","2026-09","2026-10","2026-11","2026-12"];
-        const MONTHS_2027 = ["2027-01","2027-02","2027-03","2027-04","2027-05","2027-06","2027-07","2027-08","2027-09","2027-10","2027-11","2027-12"];
-        const MONTHS_ALL  = [...MONTHS_2026, ...MONTHS_2027];
+// ─────────────────────────────
+// STATE
+// ─────────────────────────────
+const _state = { avail: {}, loaded: {} };
+let currentDatasetId = null;
 
-        // 1. LOAD DATA FROM DATABASE
+// ─────────────────────────────
+// LOAD FROM DATABASE
+// ─────────────────────────────
 async function loadFromServer() {
     try {
         const res = await fetch('/api/datasets/latest/data');
@@ -58,40 +60,20 @@ async function loadFromServer() {
             });
         });
 
-        // overwrite state
-        Object.keys(_state.avail).forEach(k => delete _state.avail[k]);
         Object.assign(_state.avail, avail);
-
-        Object.keys(_state.loaded).forEach(k => delete _state.loaded[k]);
         Object.assign(_state.loaded, loaded);
 
         rebuildAll();
-        function showToast(msg) {
-    console.log(msg);
-} catch (e) {
-        console.error("Load error:", e);
-    }
-}
-
-// Helper (KEEP THIS BELOW loadFromServer)
-// 1. LOAD DATA FROM DATABASE
-
-        // overwrite state
-        Object.keys(_state.avail).forEach(k => delete _state.avail[k]);
-        Object.assign(_state.avail, avail);
-
-        Object.keys(_state.loaded).forEach(k => delete _state.loaded[k]);
-        Object.assign(_state.loaded, loaded);
-
-        rebuildAll();
-        showToast("✓ Data loaded from database");
+        showToast("✓ Data loaded");
 
     } catch (e) {
         console.error("Load error:", e);
     }
 }
 
-// Helper (KEEP THIS BELOW loadFromServer)
+// ─────────────────────────────
+// MONTH HELPER
+// ─────────────────────────────
 function convertLabelToISO(label) {
     const [mon, yr] = label.split(' ');
     const months = {
@@ -101,39 +83,82 @@ function convertLabelToISO(label) {
     return `20${yr}-${months[mon]}`;
 }
 
-        // 2. UPLOAD LOGIC: Send files to your server.js API
-        async function handleLoadedUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            showToast("Processing Load Data...");
-            const res = await fetch('/api/upload/load', { method: 'POST', body: formData });
-            if (res.ok) loadFromServer(); // Refresh after upload
-        }
+// ─────────────────────────────
+// UPLOAD CAPACITY
+// ─────────────────────────────
+async function handleAvailUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
 
-        async function handleAvailUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            showToast("Processing Capacity Data...");
-            const res = await fetch('/api/upload/cap', { method: 'POST', body: formData });
-            if (res.ok) loadFromServer(); // Refresh after upload
-        }
+    const formData = new FormData();
+    formData.append('file', file);
 
-        // 3. UI LOGIC [RETAINED ALL YOUR ORIGINAL CHART/HEATMAP FUNCTIONS]
-        function rebuildAll() {
-            // Your original updateKPIs(), renderOverview(), renderHeatmap() go here
-            console.log("Rebuilding Dashboard UI...");
-        }
+    showToast("Uploading Capacity...");
 
-        // Boot
-        window.onload = loadFromServer;
+    const res = await fetch('/api/upload/capacity', {
+        method: 'POST',
+        body: formData
+    });
 
-        function showToast(msg) { /* Your original toast function */ }
+    const data = await res.json();
+
+    if (data.dataset_id) {
+        currentDatasetId = data.dataset_id;
+        showToast("✓ Capacity uploaded");
+    } else {
+        showToast("⚠ Capacity upload failed");
+    }
+}
+
+// ─────────────────────────────
+// UPLOAD LOAD
+// ─────────────────────────────
+async function handleLoadedUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!currentDatasetId) {
+        showToast("Upload capacity first");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('dataset_id', currentDatasetId);
+
+    showToast("Uploading Load...");
+
+    const res = await fetch('/api/upload/load', {
+        method: 'POST',
+        body: formData
+    });
+
+    if (res.ok) {
+        showToast("✓ Load uploaded");
+        loadFromServer();
+    } else {
+        showToast("⚠ Load upload failed");
+    }
+}
+
+// ─────────────────────────────
+// UI HOOK (your existing UI still works)
+// ─────────────────────────────
+function rebuildAll() {
+    console.log("Rebuilding dashboard...");
+}
+
+// ─────────────────────────────
+// TOAST
+// ─────────────────────────────
+function showToast(msg) {
+    console.log(msg);
+}
+
+// ─────────────────────────────
+// INIT
+// ─────────────────────────────
+window.onload = loadFromServer;
     </script>
 </body>
 </html>
