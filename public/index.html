@@ -1362,51 +1362,52 @@ Chart.defaults.color = '#c0cce0';
 Chart.defaults.borderColor = '#1e2535';
 Chart.defaults.font.family = "'IBM Plex Mono', monospace";
 
-// ── LOADING OVERLAY ──────────────────────────────────────────────────────────
-(function injectOverlay() {
-  const style = document.createElement('style');
-  style.textContent = `
-    #loadingOverlay {
-      position: fixed; inset: 0;
-      background: var(--bg);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 99999; flex-direction: column; gap: 16px;
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.65rem; letter-spacing: 2px;
-      color: var(--cyan); text-transform: uppercase;
-    }
-    .ld-spinner {
-      width: 32px; height: 32px;
-      border: 2px solid #1e2535;
-      border-top-color: var(--cyan);
-      border-radius: 50%;
-      animation: ldSpin 0.7s linear infinite;
-    }
-    @keyframes ldSpin { to { transform: rotate(360deg); } }
-    #emptyPrompt {
-      display: none;
-      text-align: center;
-      padding: 60px 32px;
-      font-family: 'IBM Plex Mono', monospace;
-      font-size: 0.65rem;
-      color: #b8c4d8;
-      letter-spacing: 1.5px;
-      line-height: 2.2;
-    }
-    #emptyPrompt strong { color: var(--cyan); display: block; font-size: 0.8rem; margin-bottom: 10px; }
-  `;
-  document.head.appendChild(style);
+// ── LOADING OVERLAY ─────────────────────────────────────────────────────────
+const _overlayStyle = document.createElement('style');
+_overlayStyle.textContent = `
+  #loadingOverlay {
+    position: fixed; inset: 0;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 99999; flex-direction: column; gap: 16px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem; letter-spacing: 2px;
+    color: var(--cyan); text-transform: uppercase;
+  }
+  .ld-spinner {
+    width: 32px; height: 32px;
+    border: 2px solid #1e2535;
+    border-top-color: var(--cyan);
+    border-radius: 50%;
+    animation: ldSpin 0.7s linear infinite;
+  }
+  @keyframes ldSpin { to { transform: rotate(360deg); } }
+  #emptyPrompt {
+    display: none;
+    text-align: center;
+    padding: 60px 32px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.65rem;
+    color: #b8c4d8;
+    letter-spacing: 1.5px;
+    line-height: 2.2;
+  }
+  #emptyPrompt strong {
+    color: var(--cyan); display: block;
+    font-size: 0.8rem; margin-bottom: 10px;
+  }
+`;
+document.head.appendChild(_overlayStyle);
 
-  const overlay = document.createElement('div');
-  overlay.id = 'loadingOverlay';
-  overlay.innerHTML = '<div class="ld-spinner"></div>Loading Dashboard…';
-  document.body.appendChild(overlay);
+const _overlayEl = document.createElement('div');
+_overlayEl.id = 'loadingOverlay';
+_overlayEl.innerHTML = '<div class="ld-spinner"></div>Loading Dashboard…';
+document.body.appendChild(_overlayEl);
 
-  const prompt = document.createElement('div');
-  prompt.id = 'emptyPrompt';
-  prompt.innerHTML = '<strong>NO DATA LOADED</strong>Upload your Available Hours file first,<br>then upload your Loaded Hours file.';
-  document.querySelector('.body').prepend(prompt);
-})();
+const _promptEl = document.createElement('div');
+_promptEl.id = 'emptyPrompt';
+_promptEl.innerHTML = '<strong>NO DATA LOADED</strong>Upload your Available Hours file first,<br>then upload your Loaded Hours file.';
+document.querySelector('.body').prepend(_promptEl);
 
 function hideOverlay() {
   const el = document.getElementById('loadingOverlay');
@@ -1421,15 +1422,8 @@ function showEmpty() {
   });
 }
 
-// Patch loadFromServer to use overlay + empty state
-const _origLoad = loadFromServer;
-loadFromServer = async function() {
-  try {
-    await _origLoad();
-  } finally {
-    hideOverlay();
-  }
-};
-
 // Boot
-loadFromServer();
+(async function() {
+  await loadFromServer();
+  hideOverlay();
+})();
