@@ -179,88 +179,74 @@ function parseLoad(wb, months) {
   return { loadAgg, wos };
 }
 
+// ── Shared dataset fetch helper ───────────────────────────────────────────────
+async function fetchDatasetById(id) {
+  const ds       = await pool.query('SELECT * FROM mps_datasets WHERE id=$1', [id]);
+  const months   = await pool.query('SELECT * FROM mps_months WHERE dataset_id=$1 ORDER BY month_idx', [id]);
+  const wcs      = await pool.query('SELECT * FROM mps_workcenters WHERE dataset_id=$1 ORDER BY wc', [id]);
+  const wcMonths = await pool.query('SELECT * FROM mps_wc_months WHERE dataset_id=$1', [id]);
+  const wos      = await pool.query('SELECT * FROM mps_workorders WHERE dataset_id=$1 ORDER BY must_leave', [id]);
+
+  const monthLabels = months.rows.map(m => m.label);
+  const wcMap = {};
+  wcs.rows.forEach(w => {
+    wcMap[w.id] = {
+      wc: w.wc, type: w.type, axis: w.axis,
+      months: monthLabels.map(l => ({ label: l, cap: 0, load: 0, util: null }))
+    };
+  });
+  wcMonths.rows.forEach(wm => {
+    const wc = wcMap[wm.wc_id];
+    if (!wc) return;
+    const mi = months.rows.findIndex(m => m.month_idx === wm.month_idx);
+    if (mi < 0) return;
+    wc.months[mi].cap  = +wm.cap;
+    wc.months[mi].load = +wm.load;
+    wc.months[mi].util = wm.cap > 0 ? +wm.load / +wm.cap : null;
+  });
+
+  return {
+    dataset: ds.rows[0],
+    months:  monthLabels,
+    wcs:     Object.values(wcMap),
+    wos:     wos.rows.map(w => ({
+      ...w,
+      must_leave: w.must_leave?.toISOString?.()?.slice(0, 10) || w.must_leave,
+      cust_due:   w.cust_due?.toISOString?.()?.slice(0, 10)   || w.cust_due || ''
+    })),
+  };
+}
+
 // ── ROUTES ───────────────────────────────────────────────────────────────────
 
 // GET /api/datasets
 app.get('/api/datasets', async (req, res) => {
   try {
-    const { rows } = await pool.query('SELECT id,name,uploaded_by,created_at,updated_at FROM mps_datasets ORDER BY updated_at DESC');
+    const { rows } = await pool.query(
+      'SELECT id,name,uploaded_by,created_at,updated_at FROM mps_datasets ORDER BY updated_at DESC'
+    );
     res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/datasets/latest/data  ← must be BEFORE /:id
+app.get('/api/datasets/latest/data', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id FROM mps_datasets ORDER BY updated_at DESC LIMIT 1'
+    );
+    if (!rows.length) return res.json({ dataset: null, months: [], wcs: [], wos: [] });
+    res.json(await fetchDatasetById(rows[0].id));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // GET /api/datasets/:id
 app.get('/api/datasets/:id', async (req, res) => {
   try {
-    const id = req.params.id;
-    const ds = await pool.query('SELECT * FROM mps_datasets WHERE id=$1', [id]);
-    if (!ds.rows.length) return res.status(404).json({ error: 'Not found' });
-
-    const months = await pool.query('SELECT * FROM mps_months WHERE dataset_id=$1 ORDER BY month_idx', [id]);
-    const wcs = await pool.query('SELECT * FROM mps_workcenters WHERE dataset_id=$1 ORDER BY wc', [id]);
-    const wcMonths = await pool.query('SELECT * FROM mps_wc_months WHERE dataset_id=$1', [id]);
-    const wos = await pool.query('SELECT * FROM mps_workorders WHERE dataset_id=$1 ORDER BY must_leave', [id]);
-
-    // Build structured response matching frontend APP shape
-    const monthLabels = months.rows.map(m => m.label);
-    const wcMap = {};
-    wcs.rows.forEach(w => {
-      wcMap[w.id] = { wc: w.wc, type: w.type, axis: w.axis, months: monthLabels.map(l => ({ label: l, cap: 0, load: 0, util: null })) };
-    });
-    wcMonths.rows.forEach(wm => {
-      const wc = wcMap[wm.wc_id];
-      if (!wc) return;
-      const mi = months.rows.findIndex(m => m.month_idx === wm.month_idx);
-      if (mi < 0) return;
-      wc.months[mi].cap = +wm.cap;
-      wc.months[mi].load = +wm.load;
-      wc.months[mi].util = wm.cap > 0 ? +wm.load / +wm.cap : null;
-    });
-
-    res.json({
-      dataset: ds.rows[0],
-      months: monthLabels,
-      wcs: Object.values(wcMap),
-      wos: wos.rows.map(w => ({ ...w, must_leave: w.must_leave?.toISOString?.()?.slice(0,10) || w.must_leave, cust_due: w.cust_due?.toISOString?.()?.slice(0,10) || w.cust_due || '' })),
-    });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// GET /api/datasets/latest/data
-app.get('/api/datasets/latest/data', async (req, res) => {
-  try {
-    const { rows } = await pool.query('SELECT id FROM mps_datasets ORDER BY updated_at DESC LIMIT 1');
-    if (!rows.length) return res.json({ dataset: null, months: [], wcs: [], wos: [] });
-    req.params = { id: rows[0].id };
-    // reuse handler
-    const id = rows[0].id;
-    const ds = await pool.query('SELECT * FROM mps_datasets WHERE id=$1', [id]);
-    const months = await pool.query('SELECT * FROM mps_months WHERE dataset_id=$1 ORDER BY month_idx', [id]);
-    const wcs = await pool.query('SELECT * FROM mps_workcenters WHERE dataset_id=$1 ORDER BY wc', [id]);
-    const wcMonths = await pool.query('SELECT * FROM mps_wc_months WHERE dataset_id=$1', [id]);
-    const wos = await pool.query('SELECT * FROM mps_workorders WHERE dataset_id=$1 ORDER BY must_leave', [id]);
-
-    const monthLabels = months.rows.map(m => m.label);
-    const wcMap = {};
-    wcs.rows.forEach(w => {
-      wcMap[w.id] = { wc: w.wc, type: w.type, axis: w.axis, months: monthLabels.map(l => ({ label: l, cap: 0, load: 0, util: null })) };
-    });
-    wcMonths.rows.forEach(wm => {
-      const wc = wcMap[wm.wc_id];
-      if (!wc) return;
-      const mi = months.rows.findIndex(m => m.month_idx === wm.month_idx);
-      if (mi < 0) return;
-      wc.months[mi].cap = +wm.cap;
-      wc.months[mi].load = +wm.load;
-      wc.months[mi].util = wm.cap > 0 ? +wm.load / +wm.cap : null;
-    });
-
-    res.json({
-      dataset: ds.rows[0],
-      months: monthLabels,
-      wcs: Object.values(wcMap),
-      wos: wos.rows.map(w => ({ ...w, must_leave: w.must_leave?.toISOString?.()?.slice(0,10) || w.must_leave, cust_due: w.cust_due?.toISOString?.()?.slice(0,10) || w.cust_due || '' })),
-    });
+    const id = parseInt(req.params.id);
+    const check = await pool.query('SELECT id FROM mps_datasets WHERE id=$1', [id]);
+    if (!check.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json(await fetchDatasetById(id));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -270,30 +256,27 @@ app.post('/api/upload/capacity', upload.single('file'), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const wb = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+    const wb     = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
     const months = req.body.months ? JSON.parse(req.body.months) : MONTHS_HORIZON;
     const wcData = parseCap(wb, months);
-    const name = req.body.name || 'MPS Dataset';
+    const name   = req.body.name || 'MPS Dataset';
 
-    // Create or get dataset
-    let datasetId = req.body.dataset_id ? parseInt(req.body.dataset_id) : null;
-    if (!datasetId) {
-      const dsRes = await client.query(
-        'INSERT INTO mps_datasets (name, uploaded_by) VALUES ($1,$2) RETURNING id',
-        [name, req.body.uploaded_by || 'anonymous']
+    // Always create a fresh dataset on capacity upload
+    const dsRes = await client.query(
+      'INSERT INTO mps_datasets (name, uploaded_by) VALUES ($1,$2) RETURNING id',
+      [name, req.body.uploaded_by || 'anonymous']
+    );
+    const datasetId = dsRes.rows[0].id;
+
+    // Insert months
+    for (let i = 0; i < months.length; i++) {
+      await client.query(
+        'INSERT INTO mps_months (dataset_id, label, month_idx) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
+        [datasetId, months[i], i]
       );
-      datasetId = dsRes.rows[0].id;
-
-      // Insert months
-      for (let i = 0; i < months.length; i++) {
-        await client.query(
-          'INSERT INTO mps_months (dataset_id, label, month_idx) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING',
-          [datasetId, months[i], i]
-        );
-      }
     }
 
-    // Upsert work centers
+    // Upsert work centers + their monthly capacity
     for (const wc of wcData) {
       const wcRes = await client.query(
         `INSERT INTO mps_workcenters (dataset_id, wc, type, axis)
@@ -329,22 +312,21 @@ app.post('/api/upload/load', upload.single('file'), async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const wb = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+    const wb        = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
     const datasetId = parseInt(req.body.dataset_id);
     if (!datasetId) return res.status(400).json({ error: 'dataset_id required' });
 
-    const months = await client.query('SELECT * FROM mps_months WHERE dataset_id=$1 ORDER BY month_idx', [datasetId]);
+    const months      = await client.query('SELECT * FROM mps_months WHERE dataset_id=$1 ORDER BY month_idx', [datasetId]);
     const monthLabels = months.rows.map(m => m.label);
 
     const { loadAgg, wos } = parseLoad(wb, monthLabels);
 
-    // Delete old WOs for this dataset
+    // Replace all work orders for this dataset
     await client.query('DELETE FROM mps_workorders WHERE dataset_id=$1', [datasetId]);
-
-    // Insert new WOs
     for (const wo of wos) {
       await client.query(
-        `INSERT INTO mps_workorders (dataset_id,wo,part,wc,customer,qty,must_leave,cust_due,status,setup,target,total)
+        `INSERT INTO mps_workorders
+           (dataset_id,wo,part,wc,customer,qty,must_leave,cust_due,status,setup,target,total)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
         [datasetId, wo.wo, wo.part, wo.wc, wo.customer, wo.qty,
          wo.must_leave, wo.cust_due || null, wo.status, wo.setup, wo.target, wo.total]
@@ -357,17 +339,11 @@ app.post('/api/upload/load', upload.single('file'), async (req, res) => {
       for (let i = 0; i < monthLabels.length; i++) {
         const load = (loadAgg[wc.wc] && loadAgg[wc.wc][monthLabels[i]]) || 0;
         await client.query(
-          `UPDATE mps_wc_months SET load=$1 WHERE wc_id=$2 AND month_idx=$3`,
+          'UPDATE mps_wc_months SET load=$1 WHERE wc_id=$2 AND month_idx=$3',
           [load, wc.id, i]
         );
       }
     }
-
-    // Recalc util
-    await client.query(
-      `UPDATE mps_wc_months SET load=0 WHERE dataset_id=$1 AND wc_id NOT IN (SELECT id FROM mps_workcenters WHERE dataset_id=$1)`,
-      [datasetId]
-    );
 
     await client.query('UPDATE mps_datasets SET updated_at=NOW() WHERE id=$1', [datasetId]);
     await client.query('COMMIT');
