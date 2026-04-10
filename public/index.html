@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Advanced Machining Capacity Intelligence v2</title>
+<title>Advanced Machining Capacity Intelligence</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -116,7 +116,6 @@ input[type=file] { display: none; }
   border-right: 1px solid var(--border);
   position: relative;
   overflow: hidden;
-  transition: --kc 0.3s;
 }
 .kpi:last-child { border-right: none; }
 .kpi::before {
@@ -141,7 +140,6 @@ input[type=file] { display: none; }
   font-weight: 600;
   color: var(--kc, var(--cyan));
   line-height: 1;
-  transition: color 0.3s;
 }
 .kpi-unit {
   font-family: 'IBM Plex Mono', monospace;
@@ -423,7 +421,6 @@ input[type=file] { display: none; }
   transition: color 0.2s;
 }
 
-/* sort arrow indicator */
 .sort-asc::after { content: ' ↑'; }
 .sort-desc::after { content: ' ↓'; }
 </style>
@@ -452,7 +449,7 @@ input[type=file] { display: none; }
   </div>
 </div>
 
-<!-- KPI BAR — 5 columns -->
+<!-- KPI BAR -->
 <div class="kpi-bar" id="kpiBar">
   <div class="kpi" id="kpi0" style="--kc:var(--cyan)">
     <div class="kpi-label">Effective Capacity</div>
@@ -498,11 +495,8 @@ input[type=file] { display: none; }
 </div>
 
 <div class="body">
-
-  <!-- OVERLOAD ALERT BANNER -->
   <div class="alert-banner" id="alertBanner" style="display:none"></div>
 
-  <!-- OVERVIEW CHART -->
   <div class="card">
     <div class="section-head">
       <div class="section-title" id="overviewTitle">Monthly Totals — All Work Centers Combined</div>
@@ -515,7 +509,6 @@ input[type=file] { display: none; }
     <canvas id="overviewChart" height="90"></canvas>
   </div>
 
-  <!-- PER-WC DETAIL -->
   <div class="card">
     <div class="section-head">
       <div class="section-title">Per Work Center Monthly Detail</div>
@@ -546,7 +539,6 @@ input[type=file] { display: none; }
     </div>
   </div>
 
-  <!-- HEATMAP -->
   <div class="card">
     <div class="section-head">
       <div class="section-title" id="heatmapTitle">Utilization Heatmap — All WCs × All Months</div>
@@ -565,7 +557,6 @@ input[type=file] { display: none; }
     </div>
   </div>
 
-  <!-- SUMMARY TABLE -->
   <div class="card">
     <div class="section-head">
       <div class="section-title" id="summaryTitle">Work Center Summary</div>
@@ -578,88 +569,53 @@ input[type=file] { display: none; }
       </table>
     </div>
   </div>
-
 </div>
 
 <div class="hm-tooltip" id="hmTooltip"></div>
 <div class="toast" id="toast"></div>
 
 <script>
-// ════════════════════════════════════════════════════════
-// DATA STATE
-// ════════════════════════════════════════════════════════
-const _state = {
-  avail: {},
-  loaded: {}
-};
 
-// ════════════════════════════════════════════════════════
-// CONSTANTS
-// ════════════════════════════════════════════════════════
+// ── STATE ────────────────────────────────────────────────
+const _state = { avail: {}, loaded: {} };
+
 const MONTHS_2026 = ["2026-01","2026-02","2026-03","2026-04","2026-05","2026-06","2026-07","2026-08","2026-09","2026-10","2026-11","2026-12"];
 const MONTHS_2027 = ["2027-01","2027-02","2027-03","2027-04","2027-05","2027-06","2027-07","2027-08","2027-09","2027-10","2027-11","2027-12"];
 const MONTHS_ALL  = [...MONTHS_2026, ...MONTHS_2027];
 
-// ════════════════════════════════════════════════════════
-// STATE
-// ════════════════════════════════════════════════════════
 let chartOverview = null, chartDetail = null;
 let detailView = 'bar';
 let summarySort = { col: 'u', dir: -1 };
 let activeTab = '2026';
 let currentDatasetId = null;
 
-// ════════════════════════════════════════════════════════
-// HELPERS
-// ════════════════════════════════════════════════════════
-
-/** All unique WC names across both datasets */
+// ── HELPERS ──────────────────────────────────────────────
 function allWCs() {
   return [...new Set([...Object.keys(_state.avail), ...Object.keys(_state.loaded)])].sort();
 }
-
-/** Available capacity for a WC+month. Returns 0 if not in avail. */
-function getAvail(wc, mo) {
-  return (_state.avail[wc] && _state.avail[wc][mo]) || 0;
-}
-
-/** Loaded hours for a WC+month. Returns 0 if no data. */
-function getLoaded(wc, mo) {
-  return (_state.loaded[wc] && _state.loaded[wc][mo]) || 0;
-}
-
-/**
- * FIX: Corrected utilization logic.
- * - Returns null ONLY if both avail AND loaded are 0 (truly no data for this cell)
- * - Returns a numeric ratio if there's any load, even if avail is 0 (shows as overloaded / "no cap")
- * - Specifically: if loaded > 0 and avail === 0, returns Infinity (flagged as overloaded)
- */
+function getAvail(wc, mo) { return (_state.avail[wc] && _state.avail[wc][mo]) || 0; }
+function getLoaded(wc, mo) { return (_state.loaded[wc] && _state.loaded[wc][mo]) || 0; }
 function util(wc, mo) {
-  const a = getAvail(wc, mo);
-  const l = getLoaded(wc, mo);
-  if (l === 0 && a === 0) return null;   // no data at all
-  if (a === 0) return Infinity;           // loaded but no capacity defined — overloaded
+  const a = getAvail(wc, mo), l = getLoaded(wc, mo);
+  if (l === 0 && a === 0) return null;
+  if (a === 0) return Infinity;
   return l / a;
 }
-
 function tabMonths() {
   if (activeTab === '2026') return MONTHS_2026;
   if (activeTab === '2027') return MONTHS_2027;
   return MONTHS_ALL;
 }
-
 function tabColor() {
   if (activeTab === '2026') return { main:'#00e5ff', bar:'rgba(0,229,255,0.18)', barBorder:'rgba(0,229,255,0.6)' };
   if (activeTab === '2027') return { main:'#b06bff', bar:'rgba(176,107,255,0.15)', barBorder:'rgba(176,107,255,0.6)' };
   return { main:'#39ff7e', bar:'rgba(57,255,126,0.12)', barBorder:'rgba(57,255,126,0.5)' };
 }
-
 function monthLabel(m) {
   const [y, mo] = m.split('-');
   const names = ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return names[parseInt(mo)] + " '" + y.slice(2);
 }
-
 function convertLabelToISO(label) {
   if (!label || typeof label !== 'string') return label;
   if (/^\d{4}-\d{2}$/.test(label)) return label;
@@ -667,25 +623,19 @@ function convertLabelToISO(label) {
   const moMap = {Jan:'01',Feb:'02',Mar:'03',Apr:'04',May:'05',Jun:'06',Jul:'07',Aug:'08',Sep:'09',Oct:'10',Nov:'11',Dec:'12'};
   const mm = moMap[mon];
   if (!mm || !yr) return label;
-  const yyyy = yr.length === 2 ? `20${yr}` : yr;
-  return `${yyyy}-${mm}`;
+  const yyyy = yr.length === 2 ? '20' + yr : yr;
+  return yyyy + '-' + mm;
 }
-
-/** Is this utilization ratio considered overloaded? */
-function isOver(u) {
-  return u !== null && (u > 1.0 || u === Infinity);
-}
-
+function isOver(u) { return u !== null && (u > 1.0 || u === Infinity); }
 function utilColor(u) {
   if (u === null)     return 'rgba(26,37,53,1)';
-  if (u === Infinity) return 'rgba(80,0,20,1)';     // loaded but no cap defined
+  if (u === Infinity) return 'rgba(80,0,20,1)';
   if (u > 1.0)        return 'rgba(139,0,32,1)';
   if (u > 0.9)        return 'rgba(192,64,0,1)';
   if (u > 0.7)        return 'rgba(160,124,0,1)';
   if (u > 0.4)        return 'rgba(26,92,50,1)';
   return 'rgba(13,61,46,1)';
 }
-
 function utilTextColor(u) {
   if (u === null)     return '#2a3345';
   if (u === Infinity) return '#ff6080';
@@ -695,22 +645,18 @@ function utilTextColor(u) {
   if (u > 0.4)        return '#39ff7e';
   return '#3db86a';
 }
-
 function fmtPct(u) {
-  if (u === null)     return '';
+  if (u === null) return '';
   if (u === Infinity) return '∞%';
   return (u * 100).toFixed(0) + '%';
 }
-
 function fmtPctFull(u) {
-  if (u === null)     return '—';
+  if (u === null) return '—';
   if (u === Infinity) return '∞% ⚠';
   return (u * 100).toFixed(1) + '%' + (u > 1 ? ' ⚠' : '');
 }
 
-// ════════════════════════════════════════════════════════
-// TAB SWITCHING
-// ════════════════════════════════════════════════════════
+// ── TAB ──────────────────────────────────────────────────
 function setTab(tab) {
   activeTab = tab;
   ['2026','2027','total'].forEach(t => {
@@ -719,72 +665,52 @@ function setTab(tab) {
   rebuildAll();
 }
 
-// ════════════════════════════════════════════════════════
-// KPIs
-// ════════════════════════════════════════════════════════
+// ── KPIs ─────────────────────────────────────────────────
 function updateKPIs() {
-  const wcs = allWCs();
-  const months = tabMonths();
+  const wcs = allWCs(), months = tabMonths();
   let cap = 0, ld = 0, over = 0;
   wcs.forEach(wc => {
     months.forEach(mo => {
       cap += getAvail(wc, mo);
       ld  += getLoaded(wc, mo);
-      const u = util(wc, mo);
-      // FIX: count Infinity (loaded but no cap) as overloaded too
-      if (isOver(u)) over++;
+      if (isOver(util(wc, mo))) over++;
     });
   });
   const utilPct = cap > 0 ? (ld / cap * 100) : 0;
   const slack = Math.max(0, cap - ld);
-
   document.getElementById('kpiCap').textContent    = Math.round(cap).toLocaleString();
   document.getElementById('kpiLoaded').textContent = Math.round(ld).toLocaleString();
   document.getElementById('kpiUtil').textContent   = utilPct.toFixed(1) + '%';
   document.getElementById('kpiOver').textContent   = over;
   document.getElementById('kpiSlack').textContent  = Math.round(slack).toLocaleString();
-
-  // Pulse the overload KPI red if any overloads
   const overKpi = document.getElementById('kpi3');
   overKpi.style.setProperty('--kc', over > 0 ? 'var(--red)' : 'var(--muted)');
   document.getElementById('kpiOver').style.color = over > 0 ? 'var(--red)' : 'var(--muted)';
 }
 
-// ════════════════════════════════════════════════════════
-// ALERT BANNER
-// ════════════════════════════════════════════════════════
+// ── ALERT BANNER ─────────────────────────────────────────
 function updateAlertBanner() {
-  const wcs = allWCs();
-  const months = tabMonths();
-  const critical = [];
+  const wcs = allWCs(), months = tabMonths(), critical = [];
   wcs.forEach(wc => {
     months.forEach(mo => {
       const u = util(wc, mo);
-      if (u !== null && u > 1.5) {
-        critical.push({ wc, mo, u });
-      }
+      if (u !== null && u > 1.5) critical.push({ wc, mo, u });
     });
   });
   const banner = document.getElementById('alertBanner');
-  if (critical.length === 0) {
-    banner.style.display = 'none';
-    return;
-  }
+  if (!critical.length) { banner.style.display = 'none'; return; }
   critical.sort((a,b) => (b.u === Infinity ? 1 : 0) - (a.u === Infinity ? 1 : 0) || (b.u || 0) - (a.u || 0));
   const top3 = critical.slice(0, 3).map(c => {
     const pct = c.u === Infinity ? '∞%' : (c.u*100).toFixed(0)+'%';
-    return `<strong>${c.wc}</strong> ${monthLabel(c.mo)} @ ${pct}`;
+    return '<strong>' + c.wc + '</strong> ' + monthLabel(c.mo) + ' @ ' + pct;
   }).join(' &nbsp;·&nbsp; ');
-  banner.innerHTML = `⚠ ${critical.length} critical overload${critical.length > 1 ? 's' : ''} (&gt;150% utilization): &nbsp; ${top3}${critical.length > 3 ? ` &nbsp;+ ${critical.length-3} more` : ''}`;
+  banner.innerHTML = '⚠ ' + critical.length + ' critical overload' + (critical.length > 1 ? 's' : '') + ' (&gt;150% utilization): &nbsp; ' + top3 + (critical.length > 3 ? ' &nbsp;+ ' + (critical.length-3) + ' more' : '');
   banner.style.display = 'flex';
 }
 
-// ════════════════════════════════════════════════════════
-// OVERVIEW CHART
-// ════════════════════════════════════════════════════════
+// ── OVERVIEW CHART ───────────────────────────────────────
 function renderOverview() {
-  const months = tabMonths();
-  const wcs = allWCs();
+  const months = tabMonths(), wcs = allWCs();
   const capArr = months.map(mo => wcs.reduce((s,wc) => s + getAvail(wc,mo), 0));
   const ldArr  = months.map(mo => wcs.reduce((s,wc) => s + getLoaded(wc,mo), 0));
   const labels = months.map(monthLabel);
@@ -797,21 +723,17 @@ function renderOverview() {
     ? months.map(m => m.startsWith('2026') ? 'rgba(0,229,255,0.6)' : 'rgba(176,107,255,0.6)')
     : months.map(() => tc.barBorder);
 
-  // FIX: loaded bar color should reflect overload per month
-  const ldBg = ldArr.map((l,i) => l > capArr[i] && capArr[i] > 0 ? 'rgba(255,61,90,0.65)' : 'rgba(255,124,42,0.75)');
-  const ldBorder = ldArr.map((l,i) => l > capArr[i] && capArr[i] > 0 ? '#ff3d5a' : '#ff7c2a');
+  const titles = { '2026':'2026 Monthly Totals — All Work Centers', '2027':'2027 Monthly Totals — All Work Centers', 'total':'2026 + 2027 Combined — All Work Centers' };
+  document.getElementById('overviewTitle').textContent = titles[activeTab];
 
   const yearSepPlugin = {
     id: 'yearSep',
     afterDraw(chart) {
       if (activeTab !== 'total') return;
       const { ctx: c, scales: { x, y } } = chart;
-      const x0 = x.getPixelForValue(11), x1 = x.getPixelForValue(12);
-      const xMid = (x0 + x1) / 2;
+      const xMid = (x.getPixelForValue(11) + x.getPixelForValue(12)) / 2;
       c.save();
-      c.strokeStyle = 'rgba(176,107,255,0.5)';
-      c.lineWidth = 1.5;
-      c.setLineDash([4, 3]);
+      c.strokeStyle = 'rgba(176,107,255,0.5)'; c.lineWidth = 1.5; c.setLineDash([4,3]);
       c.beginPath(); c.moveTo(xMid, y.top); c.lineTo(xMid, y.bottom); c.stroke();
       c.setLineDash([]);
       c.fillStyle = 'rgba(0,229,255,0.85)'; c.font = "bold 9px 'IBM Plex Mono'"; c.textAlign = 'right';
@@ -822,69 +744,33 @@ function renderOverview() {
     }
   };
 
-  const titles = {
-    '2026': '2026 Monthly Totals — All Work Centers',
-    '2027': '2027 Monthly Totals — All Work Centers',
-    'total': '2026 + 2027 Combined — All Work Centers'
-  };
-  document.getElementById('overviewTitle').textContent = titles[activeTab];
-
   const ctx = document.getElementById('overviewChart').getContext('2d');
   if (chartOverview) chartOverview.destroy();
   chartOverview = new Chart(ctx, {
     data: {
       labels,
       datasets: [
-        {
-          type:'bar', label:'Effective Capacity',
-          data:capArr,
-          backgroundColor:barBg, borderColor:barBorder,
-          borderWidth:1, borderRadius:2, order:2
-        },
-        {
-          type:'line', label:'Loaded Hours',
-          data:ldArr,
-          borderColor:'#ff7c2a',
-          backgroundColor:'rgba(255,124,42,0.06)',
-          borderWidth:2,
-          segment: {
-            borderColor: ctx => {
-              const i = ctx.p0DataIndex;
-              return (ldArr[i] > capArr[i] && capArr[i] > 0) ? '#ff3d5a' : '#ff7c2a';
-            }
-          },
-          pointRadius:3,
-          pointBackgroundColor: ldArr.map((l,i) =>
-            (l > capArr[i] && capArr[i] > 0) ? '#ff3d5a' : '#ff7c2a'
-          ),
-          tension:0.3, fill:true, order:1
-        }
+        { type:'bar', label:'Effective Capacity', data:capArr, backgroundColor:barBg, borderColor:barBorder, borderWidth:1, borderRadius:2, order:2 },
+        { type:'line', label:'Loaded Hours', data:ldArr, borderColor:'#ff7c2a', backgroundColor:'rgba(255,124,42,0.06)', borderWidth:2,
+          segment: { borderColor: ctx => (ldArr[ctx.p0DataIndex] > capArr[ctx.p0DataIndex] && capArr[ctx.p0DataIndex] > 0) ? '#ff3d5a' : '#ff7c2a' },
+          pointRadius:3, pointBackgroundColor: ldArr.map((l,i) => (l > capArr[i] && capArr[i] > 0) ? '#ff3d5a' : '#ff7c2a'),
+          tension:0.3, fill:true, order:1 }
       ]
     },
     options: {
-      responsive: true,
-      layout: { padding: { top: activeTab === 'total' ? 20 : 8 } },
-      interaction: { mode:'index', intersect:false },
+      responsive:true, layout:{ padding:{ top: activeTab==='total' ? 20 : 8 } },
+      interaction:{ mode:'index', intersect:false },
       plugins: {
-        legend: { display:false },
+        legend:{ display:false },
         tooltip: {
           backgroundColor:'#0d1017', borderColor:'#252d3d', borderWidth:1,
-          titleFont:{ family:"'IBM Plex Mono'", size:10 },
-          bodyFont:{ family:"'IBM Plex Mono'", size:10 },
+          titleFont:{ family:"'IBM Plex Mono'", size:10 }, bodyFont:{ family:"'IBM Plex Mono'", size:10 },
           callbacks: {
-            title: items => {
-              const yr = months[items[0].dataIndex].startsWith('2026') ? '2026' : '2027';
-              return activeTab === 'total' ? `${items[0].label}  [${yr}]` : items[0].label;
-            },
+            title: items => { const yr = months[items[0].dataIndex].startsWith('2026') ? '2026' : '2027'; return activeTab==='total' ? items[0].label+'  ['+yr+']' : items[0].label; },
             afterBody: items => {
-              const byLabel = {};
-              items.forEach(i => { byLabel[i.dataset.label] = i.parsed.y || 0; });
-              const cap = byLabel['Effective Capacity'] || 0;
-              const ld  = byLabel['Loaded Hours'] || 0;
-              if (cap > 0) {
-                const u = ld / cap * 100;
-                return [`Utilization: ${u.toFixed(1)}%${u > 100 ? ' ⚠ OVERLOADED' : ''}`];
-              }
+              const byLabel = {}; items.forEach(i => { byLabel[i.dataset.label] = i.parsed.y||0; });
+              const cap = byLabel['Effective Capacity']||0, ld = byLabel['Loaded Hours']||0;
+              if (cap > 0) { const u = ld/cap*100; return ['Utilization: '+u.toFixed(1)+'%'+(u>100?' ⚠ OVERLOADED':'')]; }
               if (ld > 0) return ['⚠ Loaded with no capacity defined'];
               return [];
             }
@@ -892,56 +778,42 @@ function renderOverview() {
         }
       },
       scales: {
-        x: {
-          grid:{ color:'rgba(30,37,53,0.6)' },
-          ticks:{ font:{size:9,family:"'IBM Plex Mono'"},color:'#c0cce0', autoSkip:false, maxRotation:45 }
-        },
-        y: {
-          grid:{ color:'rgba(30,37,53,0.6)' },
-          ticks:{ font:{size:9,family:"'IBM Plex Mono'"},color:'#c0cce0', callback:v=>v.toLocaleString() }
-        }
+        x: { grid:{color:'rgba(30,37,53,0.6)'}, ticks:{font:{size:9,family:"'IBM Plex Mono'"},color:'#c0cce0',autoSkip:false,maxRotation:45} },
+        y: { grid:{color:'rgba(30,37,53,0.6)'}, ticks:{font:{size:9,family:"'IBM Plex Mono'"},color:'#c0cce0',callback:v=>v.toLocaleString()} }
       }
     },
     plugins: [yearSepPlugin]
   });
 }
 
-// ════════════════════════════════════════════════════════
-// WC SELECTOR
-// ════════════════════════════════════════════════════════
+// ── WC SELECTOR ──────────────────────────────────────────
 function populateSelector() {
   const sel = document.getElementById('wcSelect');
   const prev = sel.value;
   const wcs = allWCs();
-  sel.innerHTML = wcs.map(w => `<option value="${w}"${w===prev?' selected':''}>${w}</option>`).join('');
-  // If previous selection gone, default to first
+  sel.innerHTML = wcs.map(w => '<option value="' + w + '"' + (w===prev?' selected':'') + '>' + w + '</option>').join('');
   if (!wcs.includes(sel.value) && wcs.length > 0) sel.value = wcs[0];
 }
-
 function setView(v) {
   detailView = v;
-  document.getElementById('vt-bar').classList.toggle('active', v === 'bar');
-  document.getElementById('vt-line').classList.toggle('active', v === 'line');
+  document.getElementById('vt-bar').classList.toggle('active', v==='bar');
+  document.getElementById('vt-line').classList.toggle('active', v==='line');
   renderDetail();
 }
 
-// ════════════════════════════════════════════════════════
-// DETAIL CHART
-// ════════════════════════════════════════════════════════
+// ── DETAIL CHART ─────────────────────────────────────────
 function renderDetail() {
   const wc = document.getElementById('wcSelect').value;
   if (!wc) return;
-  const months = tabMonths();
-  const labels = months.map(monthLabel);
+  const months = tabMonths(), labels = months.map(monthLabel);
   const capArr = months.map(mo => getAvail(wc, mo));
   const ldArr  = months.map(mo => getLoaded(wc, mo));
   const tc = tabColor();
+  const overColors  = ldArr.map((l,i) => l > capArr[i] && capArr[i] > 0 ? 'rgba(255,61,90,0.65)' : 'rgba(255,124,42,0.55)');
+  const overBorders = ldArr.map((l,i) => l > capArr[i] && capArr[i] > 0 ? '#ff3d5a' : '#ff7c2a');
 
   const ctx = document.getElementById('detailChart').getContext('2d');
   if (chartDetail) chartDetail.destroy();
-
-  const overColors = ldArr.map((l,i) => l > capArr[i] && capArr[i] > 0 ? 'rgba(255,61,90,0.65)' : 'rgba(255,124,42,0.55)');
-  const overBorders = ldArr.map((l,i) => l > capArr[i] && capArr[i] > 0 ? '#ff3d5a' : '#ff7c2a');
 
   const ds = detailView === 'bar' ? [
     { type:'bar', label:'Effective Capacity', data:capArr, backgroundColor:tc.bar, borderColor:tc.barBorder, borderWidth:1, borderRadius:2, order:2 },
@@ -949,121 +821,68 @@ function renderDetail() {
   ] : [
     { type:'line', label:'Effective Capacity', data:capArr, borderColor:tc.main, backgroundColor:tc.bar, borderWidth:1.5, pointRadius:2, tension:0.3, fill:true, order:2 },
     { type:'line', label:'Loaded Hours', data:ldArr, borderColor:'#ff7c2a', backgroundColor:'rgba(255,124,42,0.05)', borderWidth:2,
-      segment: {
-        borderColor: ctx => (ldArr[ctx.p0DataIndex] > capArr[ctx.p0DataIndex] && capArr[ctx.p0DataIndex] > 0) ? '#ff3d5a' : '#ff7c2a'
-      },
-      pointRadius: ldArr.map((l,i) => l > capArr[i] && capArr[i] > 0 ? 5 : 2),
-      pointBackgroundColor: overBorders,
-      tension:0.3, fill:true, order:1
-    }
+      segment:{ borderColor: ctx => (ldArr[ctx.p0DataIndex]>capArr[ctx.p0DataIndex]&&capArr[ctx.p0DataIndex]>0)?'#ff3d5a':'#ff7c2a' },
+      pointRadius:ldArr.map((l,i)=>l>capArr[i]&&capArr[i]>0?5:2), pointBackgroundColor:overBorders,
+      tension:0.3, fill:true, order:1 }
   ];
 
   chartDetail = new Chart(ctx, {
     data: { labels, datasets: ds },
     options: {
-      responsive:true,
-      interaction:{ mode:'index', intersect:false },
+      responsive:true, interaction:{mode:'index',intersect:false},
       plugins: {
-        legend:{ display:false },
+        legend:{display:false},
         tooltip: {
           backgroundColor:'#0d1017', borderColor:'#252d3d', borderWidth:1,
-          titleFont:{ family:"'IBM Plex Mono'", size:10 },
-          bodyFont:{ family:"'IBM Plex Mono'", size:10 },
+          titleFont:{family:"'IBM Plex Mono'",size:10}, bodyFont:{family:"'IBM Plex Mono'",size:10},
           callbacks: {
             afterBody: items => {
-              const byLabel = {};
-              items.forEach(i => { byLabel[i.dataset.label] = i.parsed.y || 0; });
-              const cap = byLabel['Effective Capacity'] || 0;
-              const ld  = byLabel['Loaded Hours'] || 0;
-              if (cap > 0) {
-                const u = ld / cap * 100;
-                return [`Utilization: ${u.toFixed(1)}%${u > 100 ? ' ⚠ OVERLOADED' : ''}`];
-              }
-              if (ld > 0) return ['⚠ No capacity defined'];
-              return [];
+              const byLabel = {}; items.forEach(i=>{byLabel[i.dataset.label]=i.parsed.y||0;});
+              const cap=byLabel['Effective Capacity']||0, ld=byLabel['Loaded Hours']||0;
+              if (cap>0){const u=ld/cap*100;return['Utilization: '+u.toFixed(1)+'%'+(u>100?' ⚠ OVERLOADED':'')];}
+              if (ld>0) return['⚠ No capacity defined'];
+              return[];
             }
           }
         }
       },
       scales: {
-        x:{
-          grid:{color:'rgba(30,37,53,0.6)'},
-          ticks:{font:{size:9,family:"'IBM Plex Mono'"},color:'#c0cce0', autoSkip:false, maxRotation:45}
-        },
-        y:{
-          grid:{color:'rgba(30,37,53,0.6)'},
-          ticks:{font:{size:9,family:"'IBM Plex Mono'"},color:'#c0cce0',callback:v=>v.toLocaleString()}
-        }
+        x:{grid:{color:'rgba(30,37,53,0.6)'},ticks:{font:{size:9,family:"'IBM Plex Mono'"},color:'#c0cce0',autoSkip:false,maxRotation:45}},
+        y:{grid:{color:'rgba(30,37,53,0.6)'},ticks:{font:{size:9,family:"'IBM Plex Mono'"},color:'#c0cce0',callback:v=>v.toLocaleString()}}
       }
     }
   });
 
-  // Side table
   const tbody = document.getElementById('detailTable');
   tbody.innerHTML = months.map(mo => {
-    const cap = getAvail(wc,mo);
-    const ld  = getLoaded(wc,mo);
-    const u   = util(wc, mo);
-    const tc2 = utilTextColor(u);
+    const cap=getAvail(wc,mo), ld=getLoaded(wc,mo), u=util(wc,mo), tc2=utilTextColor(u);
     const overWarn = isOver(u) ? ' <span style="color:var(--red)">⚠</span>' : '';
-    return `<tr>
-      <td style="color:var(--muted2)">${monthLabel(mo)}</td>
-      <td style="color:var(--cyan)">${cap > 0 ? cap.toFixed(1) : '—'}</td>
-      <td style="color:${isOver(u) ? 'var(--red)' : 'var(--orange)'}">${ld > 0 ? ld.toFixed(1) : '—'}</td>
-      <td><span style="color:${tc2};font-weight:500">${fmtPctFull(u)}</span>${overWarn}</td>
-    </tr>`;
+    return '<tr><td style="color:var(--muted2)">'+monthLabel(mo)+'</td><td style="color:var(--cyan)">'+(cap>0?cap.toFixed(1):'—')+'</td><td style="color:'+(isOver(u)?'var(--red)':'var(--orange)')+'">'+(ld>0?ld.toFixed(1):'—')+'</td><td><span style="color:'+tc2+';font-weight:500">'+fmtPctFull(u)+'</span>'+overWarn+'</td></tr>';
   }).join('');
 }
 
-// ════════════════════════════════════════════════════════
-// HEATMAP
-// ════════════════════════════════════════════════════════
+// ── HEATMAP ──────────────────────────────────────────────
 function renderHeatmap() {
-  const wcs = allWCs();
-  const months = tabMonths();
-  const titles = {
-    '2026':'Utilization Heatmap — 2026',
-    '2027':'Utilization Heatmap — 2027',
-    'total':'Utilization Heatmap — 2026 + 2027'
-  };
+  const wcs = allWCs(), months = tabMonths();
+  const titles = { '2026':'Utilization Heatmap — 2026', '2027':'Utilization Heatmap — 2027', 'total':'Utilization Heatmap — 2026 + 2027' };
   document.getElementById('heatmapTitle').textContent = titles[activeTab];
 
   let html = '<thead><tr><th class="wc-col">Work Center</th>';
-  months.forEach(m => { html += `<th>${monthLabel(m)}</th>`; });
+  months.forEach(m => { html += '<th>'+monthLabel(m)+'</th>'; });
   html += '</tr></thead><tbody>';
 
   wcs.forEach(wc => {
-    html += `<tr><td class="wc-name">${wc}</td>`;
+    html += '<tr><td class="wc-name">'+wc+'</td>';
     months.forEach(mo => {
-      const cap = getAvail(wc, mo);
-      const ld  = getLoaded(wc, mo);
-      const u   = util(wc, mo);
-      const bg  = utilColor(u);
-      const tc2 = utilTextColor(u);
-
-      // FIX: show "∞" for loaded with no avail defined
-      let txt = '';
-      let extraClass = '';
-      if (u === null) {
-        txt = '';
-      } else if (u === Infinity) {
-        txt = '∞%';
-        extraClass = ' no-avail';
-      } else {
-        txt = fmtPct(u);
-      }
-
-      const safeWc = wc.replace(/'/g, "\\'");
-      html += `<td class="${extraClass.trim()}" style="background:${bg};color:${tc2}"
-        data-wc="${wc.replace(/"/g,'&quot;')}"
-        data-mo="${mo}"
-        data-cap="${cap}"
-        data-ld="${ld}"
-        data-u="${u === Infinity ? 'Infinity' : u !== null ? (u*100).toFixed(1) : 'N/A'}"
-        onclick="selectWC('${safeWc}')"
-        onmouseenter="showHMTip(event)"
-        onmouseleave="hideHMTip()"
-      >${txt}</td>`;
+      const cap=getAvail(wc,mo), ld=getLoaded(wc,mo), u=util(wc,mo);
+      const bg=utilColor(u), tc2=utilTextColor(u);
+      let txt='', extraClass='';
+      if (u===null){txt='';}
+      else if (u===Infinity){txt='∞%';extraClass=' no-avail';}
+      else{txt=fmtPct(u);}
+      const safeWc = wc.replace(/'/g,"\\'");
+      const uVal = u===Infinity?'Infinity':u!==null?(u*100).toFixed(1):'N/A';
+      html += '<td class="'+extraClass.trim()+'" style="background:'+bg+';color:'+tc2+'" data-wc="'+wc.replace(/"/g,'&quot;')+'" data-mo="'+mo+'" data-cap="'+cap+'" data-ld="'+ld+'" data-u="'+uVal+'" onclick="selectWC(\''+safeWc+'\')" onmouseenter="showHMTip(event)" onmouseleave="hideHMTip()">'+txt+'</td>';
     });
     html += '</tr>';
   });
@@ -1074,266 +893,152 @@ function renderHeatmap() {
 function showHMTip(e) {
   const d = e.target.dataset;
   if (!d.wc) return;
-  const rawU = d.u;
-  const isInf = rawU === 'Infinity';
-  const uNum = isInf ? Infinity : parseFloat(rawU);
-  const isNA = rawU === 'N/A';
-  const over = !isNA && uNum > 100;
+  const isInf=d.u==='Infinity', uNum=isInf?Infinity:parseFloat(d.u), isNA=d.u==='N/A';
+  const over=!isNA&&uNum>100;
+  const capVal=parseFloat(d.cap), ldVal=parseFloat(d.ld);
+  const uDisp=isNA?'N/A':isInf?'∞% ⚠':uNum.toFixed(1)+'%'+(over?' ⚠':'');
   const tooltip = document.getElementById('hmTooltip');
-  const capVal = parseFloat(d.cap);
-  const ldVal  = parseFloat(d.ld);
-  const uDisp  = isNA ? 'N/A' : isInf ? '∞% ⚠' : `${uNum.toFixed(1)}%${over ? ' ⚠' : ''}`;
-  tooltip.innerHTML = `<b style="color:var(--cyan)">${d.wc}</b><br>${monthLabel(d.mo)}<br>Capacity: ${capVal > 0 ? capVal.toFixed(1) + ' hrs' : '<span style="color:var(--muted)">not defined</span>'}<br>Loaded: ${ldVal > 0 ? ldVal.toFixed(1) + ' hrs' : '—'}<br>Util: <b style="color:${over||isInf?'var(--red)':'var(--green)'}">${uDisp}</b>`;
-  tooltip.style.left = (e.clientX + 14) + 'px';
-  tooltip.style.top  = (e.clientY - 10) + 'px';
+  tooltip.innerHTML = '<b style="color:var(--cyan)">'+d.wc+'</b><br>'+monthLabel(d.mo)+'<br>Capacity: '+(capVal>0?capVal.toFixed(1)+' hrs':'<span style="color:var(--muted)">not defined</span>')+'<br>Loaded: '+(ldVal>0?ldVal.toFixed(1)+' hrs':'—')+'<br>Util: <b style="color:'+(over||isInf?'var(--red)':'var(--green)')+'">'+uDisp+'</b>';
+  tooltip.style.left=(e.clientX+14)+'px'; tooltip.style.top=(e.clientY-10)+'px';
   tooltip.classList.add('show');
 }
-
-function hideHMTip() {
-  document.getElementById('hmTooltip').classList.remove('show');
-}
-
+function hideHMTip() { document.getElementById('hmTooltip').classList.remove('show'); }
 function selectWC(wc) {
   document.getElementById('wcSelect').value = wc;
   renderDetail();
   document.getElementById('wcSelect').scrollIntoView({ behavior:'smooth', block:'center' });
 }
 
-// ════════════════════════════════════════════════════════
-// SUMMARY TABLE
-// ════════════════════════════════════════════════════════
+// ── SUMMARY TABLE ────────────────────────────────────────
 function renderSummary() {
-  const wcs = allWCs();
-  const months = tabMonths();
-  const label = activeTab === 'total' ? '2026 + 2027' : activeTab;
-  const tc = tabColor().main;
-
-  document.getElementById('summaryTitle').textContent = `Work Center Summary — ${label}`;
+  const wcs=allWCs(), months=tabMonths(), label=activeTab==='total'?'2026 + 2027':activeTab, tc=tabColor().main;
+  document.getElementById('summaryTitle').textContent = 'Work Center Summary — '+label;
 
   const cols = [
-    { key:'wc',   label:'Work Center',       sortLabel: true },
-    { key:'cap',  label:'Eff. Capacity'                      },
-    { key:'ld',   label:'Loaded Hrs'                         },
-    { key:'u',    label:'Utilization'                        },
-    { key:'slack',label:'Available Hrs'                      },
-    { key:'over', label:'Overloaded Months'                  },
+    {key:'wc',label:'Work Center'},{key:'cap',label:'Eff. Capacity'},{key:'ld',label:'Loaded Hrs'},
+    {key:'u',label:'Utilization'},{key:'slack',label:'Available Hrs'},{key:'over',label:'Overloaded Months'}
   ];
-
-  const { col: sc, dir: sd } = summarySort;
-  document.getElementById('summaryHead').innerHTML = '<tr>' + cols.map(c => {
-    const active = sc === c.key;
-    const arrow = active ? (sd === 1 ? 'sort-asc' : 'sort-desc') : '';
-    return `<th class="${active ? 'sort-active ' + arrow : ''}" onclick="sortSummary('${c.key}')">${c.label}</th>`;
-  }).join('') + '</tr>';
+  const {col:sc,dir:sd} = summarySort;
+  document.getElementById('summaryHead').innerHTML = '<tr>'+cols.map(c => {
+    const active=sc===c.key, arrow=active?(sd===1?'sort-asc':'sort-desc'):'';
+    return '<th class="'+(active?'sort-active '+arrow:'')+'" onclick="sortSummary(\''+c.key+'\')">'+c.label+'</th>';
+  }).join('')+'</tr>';
 
   let rows = wcs.map(wc => {
-    let cap=0, ld=0, over=0;
-    months.forEach(mo => {
-      cap += getAvail(wc, mo);
-      ld  += getLoaded(wc, mo);
-      const u = util(wc, mo);
-      if (isOver(u)) over++;
-    });
-    const u = cap > 0 ? ld / cap : (ld > 0 ? Infinity : 0);
-    const slack = Math.max(0, cap - ld);
-    return { wc, cap, ld, u, slack, over };
+    let cap=0,ld=0,over=0;
+    months.forEach(mo=>{cap+=getAvail(wc,mo);ld+=getLoaded(wc,mo);if(isOver(util(wc,mo)))over++;});
+    const u=cap>0?ld/cap:(ld>0?Infinity:0), slack=Math.max(0,cap-ld);
+    return {wc,cap,ld,u,slack,over};
+  });
+  rows.sort((a,b)=>{
+    let va=sc==='wc'?a.wc:a[sc], vb=sc==='wc'?b.wc:b[sc];
+    if(va===Infinity&&vb!==Infinity)return sd;
+    if(vb===Infinity&&va!==Infinity)return -sd;
+    return(va>vb?1:va<vb?-1:0)*sd;
   });
 
-  rows.sort((a,b) => {
-    let va = sc === 'wc' ? a.wc : a[sc];
-    let vb = sc === 'wc' ? b.wc : b[sc];
-    // Infinity sorts last for asc, first for desc
-    if (va === Infinity && vb !== Infinity) return sd;
-    if (vb === Infinity && va !== Infinity) return -sd;
-    return (va > vb ? 1 : va < vb ? -1 : 0) * sd;
-  });
-
-  const tbody = document.getElementById('summaryBody');
-  tbody.innerHTML = rows.map(r => {
-    const txtColor = utilTextColor(r.u);
-    const pctDisp  = r.u === Infinity ? '∞%' : (r.u * 100).toFixed(1) + '%';
-    const barW     = r.u === Infinity ? 100 : Math.min(r.u * 100, 100).toFixed(1);
-    const barC     = isOver({...r}) || r.u === Infinity ? 'var(--red)'
-                   : r.u > 0.9 ? 'var(--orange)'
-                   : r.u > 0.7 ? 'var(--yellow)'
-                   : 'var(--green)';
-    // Determine bar color properly
-    const bc = r.u === Infinity || r.u > 1
-               ? 'var(--red)'
-               : r.u > 0.9 ? 'var(--orange)'
-               : r.u > 0.7 ? 'var(--yellow)'
-               : 'var(--green)';
-    const safeWc = r.wc.replace(/'/g,"\\'");
-    return `<tr onclick="selectWC('${safeWc}')" style="cursor:pointer">
-      <td style="color:var(--muted2);font-size:0.72rem">${r.wc}</td>
-      <td style="color:${tc}">${Math.round(r.cap).toLocaleString()}</td>
-      <td style="color:${isOver(r) || r.u===Infinity ? 'var(--red)' : 'var(--orange)'}">${Math.round(r.ld).toLocaleString()}</td>
-      <td>
-        <div class="util-bar-wrap">
-          <div class="util-bar">
-            <div class="util-bar-fill" style="width:${barW}%;background:${bc};box-shadow:0 0 5px ${bc}"></div>
-          </div>
-          <span class="util-pct" style="color:${txtColor}">${pctDisp}${r.u > 1 || r.u === Infinity ? ' ⚠' : ''}</span>
-        </div>
-      </td>
-      <td style="color:${tc}">${Math.round(r.slack).toLocaleString()}</td>
-      <td style="color:${r.over > 0 ? 'var(--red)' : 'var(--muted)'}">
-        ${r.over > 0
-          ? `<span class="status-dot" style="color:var(--red)">●</span>${r.over}`
-          : '<span style="color:var(--muted)">—</span>'}
-      </td>
-    </tr>`;
+  document.getElementById('summaryBody').innerHTML = rows.map(r => {
+    const txtColor=utilTextColor(r.u), pctDisp=r.u===Infinity?'∞%':(r.u*100).toFixed(1)+'%';
+    const barW=r.u===Infinity?100:Math.min(r.u*100,100).toFixed(1);
+    const bc=r.u===Infinity||r.u>1?'var(--red)':r.u>0.9?'var(--orange)':r.u>0.7?'var(--yellow)':'var(--green)';
+    const safeWc=r.wc.replace(/'/g,"\\'");
+    return '<tr onclick="selectWC(\''+safeWc+'\')" style="cursor:pointer"><td style="color:var(--muted2);font-size:0.72rem">'+r.wc+'</td><td style="color:'+tc+'">'+Math.round(r.cap).toLocaleString()+'</td><td style="color:'+(r.u===Infinity||r.u>1?'var(--red)':'var(--orange)')+'">'+Math.round(r.ld).toLocaleString()+'</td><td><div class="util-bar-wrap"><div class="util-bar"><div class="util-bar-fill" style="width:'+barW+'%;background:'+bc+';box-shadow:0 0 5px '+bc+'"></div></div><span class="util-pct" style="color:'+txtColor+'">'+pctDisp+(r.u>1||r.u===Infinity?' ⚠':'')+'</span></div></td><td style="color:'+tc+'">'+Math.round(r.slack).toLocaleString()+'</td><td style="color:'+(r.over>0?'var(--red)':'var(--muted)')+'">'+( r.over>0?'<span class="status-dot" style="color:var(--red)">●</span>'+r.over:'<span style="color:var(--muted)">—</span>')+'</td></tr>';
   }).join('');
 }
 
-// FIX: helper that accepts plain object not util() result
-function isOverRow(r) {
-  return r.u === Infinity || r.u > 1;
-}
-
 function sortSummary(col) {
-  if (summarySort.col === col) summarySort.dir *= -1;
-  else { summarySort.col = col; summarySort.dir = -1; }
+  if (summarySort.col===col) summarySort.dir*=-1;
+  else { summarySort.col=col; summarySort.dir=-1; }
   renderSummary();
 }
 
-// ════════════════════════════════════════════════════════
-// FILE UPLOAD HANDLERS
-// ════════════════════════════════════════════════════════
+// ── UPLOAD HANDLERS ──────────────────────────────────────
 async function handleAvailUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
-
   document.getElementById('availFileName').textContent = file.name;
   document.getElementById('uploadAvailBtn').classList.remove('active');
-
   const form = new FormData();
   form.append('file', file);
   form.append('name', 'Capacity Dashboard Dataset');
-
   try {
     showToast('Uploading available hours…');
-    const res = await fetch('/api/upload/capacity', {
-      method: 'POST',
-      body: form
-    });
+    const res = await fetch('/api/upload/capacity', { method:'POST', body:form });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-
+    if (!res.ok) throw new Error(data.error || 'HTTP '+res.status);
     currentDatasetId = data.dataset_id;
     document.getElementById('uploadAvailBtn').classList.add('active');
-    showToast(`✓ Capacity uploaded from ${file.name}`);
+    showToast('✓ Capacity uploaded from '+file.name);
     await loadFromServer();
-  } catch (err) {
+  } catch(err) {
     console.error(err);
-    showToast(`⚠ ${err.message}`);
-  } finally {
-    event.target.value = '';
-  }
+    showToast('⚠ '+err.message);
+  } finally { event.target.value=''; }
 }
 
 async function handleLoadedUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
-
   document.getElementById('loadedFileName').textContent = file.name;
   document.getElementById('uploadLoadedBtn').classList.remove('active');
-
   try {
-    if (!currentDatasetId) {
-      await loadFromServer();
-    }
-    if (!currentDatasetId) {
-      showToast('⚠ Upload Available Hours first');
-      event.target.value = '';
-      return;
-    }
-
+    if (!currentDatasetId) await loadFromServer();
+    if (!currentDatasetId) { showToast('⚠ Upload Available Hours first'); event.target.value=''; return; }
     const form = new FormData();
     form.append('file', file);
     form.append('dataset_id', currentDatasetId);
-
     showToast('Uploading loaded hours…');
-    const res = await fetch('/api/upload/load', {
-      method: 'POST',
-      body: form
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-
+    const res = await fetch('/api/upload/load', { method:'POST', body:form });
+    const data = await res.json().catch(()=>({}));
+    if (!res.ok) throw new Error(data.error || 'HTTP '+res.status);
     document.getElementById('uploadLoadedBtn').classList.add('active');
-    showToast(`✓ Loaded hours uploaded from ${file.name}`);
+    showToast('✓ Loaded hours uploaded from '+file.name);
     await loadFromServer();
-  } catch (err) {
+  } catch(err) {
     console.error(err);
-    showToast(`⚠ ${err.message}`);
-  } finally {
-    event.target.value = '';
-  }
+    showToast('⚠ '+err.message);
+  } finally { event.target.value=''; }
 }
 
-// ════════════════════════════════════════════════════════
-// PERSIST (graceful no-op when no server)
-// ════════════════════════════════════════════════════════
-async function saveToServer() {
-  // Persistence is handled directly by the upload API endpoints.
-  return true;
-}
-
+// ── SERVER SYNC ──────────────────────────────────────────
 async function loadFromServer() {
   try {
     const res = await fetch('/api/datasets/latest/data');
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-
+    if (!res.ok) throw new Error(data.error || 'HTTP '+res.status);
     if (!data || !data.wcs || !data.wcs.length) {
-      currentDatasetId = data?.dataset?.id || null;
+      currentDatasetId = data && data.dataset ? data.dataset.id : null;
       rebuildAll();
       return;
     }
-
-    currentDatasetId = data.dataset?.id || null;
-
-    const avail = {};
-    const loaded = {};
-
+    currentDatasetId = data.dataset ? data.dataset.id : null;
+    const avail = {}, loaded = {};
     data.wcs.forEach(wc => {
-      avail[wc.wc] = {};
-      loaded[wc.wc] = {};
-
+      avail[wc.wc] = {}; loaded[wc.wc] = {};
       (wc.months || []).forEach(m => {
         const key = convertLabelToISO(m.label);
         if (!key || !MONTHS_ALL.includes(key)) return;
-        avail[wc.wc][key] = Number(m.cap || 0);
+        avail[wc.wc][key]  = Number(m.cap  || 0);
         loaded[wc.wc][key] = Number(m.load || 0);
       });
     });
-
     Object.keys(_state.avail).forEach(k => delete _state.avail[k]);
     Object.assign(_state.avail, avail);
     Object.keys(_state.loaded).forEach(k => delete _state.loaded[k]);
     Object.assign(_state.loaded, loaded);
-
     if (data.dataset) {
       document.getElementById('uploadAvailBtn').classList.add('active');
-      if (Object.keys(loaded).some(k => Object.keys(loaded[k] || {}).length)) {
+      if (Object.keys(loaded).some(k => Object.keys(loaded[k]||{}).length)) {
         document.getElementById('uploadLoadedBtn').classList.add('active');
       }
     }
-
   } catch(e) {
     console.warn('Could not load from server:', e.message);
   }
   rebuildAll();
 }
 
-function connectWS() {
-  // WebSocket live sync is not enabled by this backend version.
-}
-
-// ════════════════════════════════════════════════════════
-// REBUILD ALL
-// ════════════════════════════════════════════════════════
+// ── REBUILD ──────────────────────────────────────────────
 function rebuildAll() {
   updateKPIs();
   updateAlertBanner();
@@ -1344,9 +1049,7 @@ function rebuildAll() {
   renderSummary();
 }
 
-// ════════════════════════════════════════════════════════
-// TOAST
-// ════════════════════════════════════════════════════════
+// ── TOAST ────────────────────────────────────────────────
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -1355,75 +1058,13 @@ function showToast(msg) {
   t._timer = setTimeout(() => t.classList.remove('show'), 3500);
 }
 
-// ════════════════════════════════════════════════════════
-// CHART DEFAULTS & INIT
-// ════════════════════════════════════════════════════════
+// ── INIT ─────────────────────────────────────────────────
 Chart.defaults.color = '#c0cce0';
 Chart.defaults.borderColor = '#1e2535';
 Chart.defaults.font.family = "'IBM Plex Mono', monospace";
 
-// ── LOADING OVERLAY ─────────────────────────────────────────────────────────
-const _overlayStyle = document.createElement('style');
-_overlayStyle.textContent = `
-  #loadingOverlay {
-    position: fixed; inset: 0;
-    background: var(--bg);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 99999; flex-direction: column; gap: 16px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.65rem; letter-spacing: 2px;
-    color: var(--cyan); text-transform: uppercase;
-  }
-  .ld-spinner {
-    width: 32px; height: 32px;
-    border: 2px solid #1e2535;
-    border-top-color: var(--cyan);
-    border-radius: 50%;
-    animation: ldSpin 0.7s linear infinite;
-  }
-  @keyframes ldSpin { to { transform: rotate(360deg); } }
-  #emptyPrompt {
-    display: none;
-    text-align: center;
-    padding: 60px 32px;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.65rem;
-    color: #b8c4d8;
-    letter-spacing: 1.5px;
-    line-height: 2.2;
-  }
-  #emptyPrompt strong {
-    color: var(--cyan); display: block;
-    font-size: 0.8rem; margin-bottom: 10px;
-  }
-`;
-document.head.appendChild(_overlayStyle);
+loadFromServer();
 
-const _overlayEl = document.createElement('div');
-_overlayEl.id = 'loadingOverlay';
-_overlayEl.innerHTML = '<div class="ld-spinner"></div>Loading Dashboard…';
-document.body.appendChild(_overlayEl);
-
-const _promptEl = document.createElement('div');
-_promptEl.id = 'emptyPrompt';
-_promptEl.innerHTML = '<strong>NO DATA LOADED</strong>Upload your Available Hours file first,<br>then upload your Loaded Hours file.';
-document.querySelector('.body').prepend(_promptEl);
-
-function hideOverlay() {
-  const el = document.getElementById('loadingOverlay');
-  if (el) el.remove();
-}
-
-function showEmpty() {
-  hideOverlay();
-  document.getElementById('emptyPrompt').style.display = 'block';
-  ['kpiCap','kpiLoaded','kpiUtil','kpiOver','kpiSlack'].forEach(id => {
-    document.getElementById(id).textContent = '—';
-  });
-}
-
-// Boot
-(async function() {
-  await loadFromServer();
-  hideOverlay();
-})();
+</script>
+</body>
+</html>
