@@ -499,6 +499,15 @@ function loadAppData(data) {
   APP.wcs = wcs || [];
   APP.wos = wos || [];
 
+  // Reset all filter/state so sidebar and gauges work cleanly with new data
+  sidebarAxisFlt = 'ALL';
+  sidebarSearch_val = '';
+  wcGaugeAxisFilter = 'ALL';
+  wcGaugeMonth = null;
+  axisGaugeMonth = null;
+  typeGaugeMonth = null;
+  if (document.getElementById('sb-wc-search')) document.getElementById('sb-wc-search').value = '';
+
   // Rebuild customer aggregation from WOs
   rebuildCustomers();
 
@@ -573,7 +582,7 @@ async function switchDataset() {
   if (!id || id === currentDatasetId) return;
   showGlobalLoading('Loading dataset…');
   try {
-    const data = await apiFetch(`/api/datasets/${id}/data`);
+    const data = await apiFetch(`/api/datasets/${id}`);
     currentDatasetId = id;
     loadAppData(data);
     setSyncStatus('live', `Dataset: ${data.dataset.name}`);
@@ -593,7 +602,7 @@ async function deleteDataset() {
     await refreshDatasetList();
     // Load next available dataset
     if (allDatasets.length) {
-      const data = await apiFetch(`/api/datasets/${allDatasets[0].id}/data`);
+      const data = await apiFetch(`/api/datasets/${allDatasets[0].id}`);
       currentDatasetId = allDatasets[0].id;
       loadAppData(data);
       renderDatasetSelect();
@@ -636,7 +645,7 @@ async function processFile(file, type) {
       await refreshDatasetList();
       renderDatasetSelect();
       // Refresh data
-      const data = await apiFetch(`/api/datasets/${currentDatasetId}/data`);
+      const data = await apiFetch(`/api/datasets/${currentDatasetId}`);
       loadAppData(data);
       setSyncStatus('live', `Dataset: ${data.dataset.name}`);
       rebuildAll();
@@ -659,7 +668,7 @@ async function processFile(file, type) {
       showUpRes('load', true, `✓ ${res.wos} work orders saved to database`);
       setUpStatus('✓ Saved', true);
       // Refresh data
-      const data = await apiFetch(`/api/datasets/${currentDatasetId}/data`);
+      const data = await apiFetch(`/api/datasets/${currentDatasetId}`);
       loadAppData(data);
       setSyncStatus('live', `Dataset: ${data.dataset.name}`);
       await refreshDatasetList();
@@ -1080,7 +1089,7 @@ function filterWO(){
   const cu=document.getElementById('wo-cust-sel').value;
   const validPfx=new Set();
   getFilteredMonths().forEach(m=>{const pts=m.split(' ');const yr=2000+parseInt(pts[1]);const mn=new Date(Date.parse(pts[0]+' 1 2000')).getMonth()+1;validPfx.add(`${yr}-${String(mn).padStart(2,'0')}`);});
-  woFiltered=APP.wos.filter(w=>(woStatus==='ALL'||w.status===st)&&(!mo||w.must_leave.startsWith(mo))&&(!cu||w.customer===cu)&&(!s||[w.wo,w.part,w.wc,w.customer].some(v=>String(v).toLowerCase().includes(s)))&&(yearFilter==='all'||validPfx.has(w.must_leave.slice(0,7))));
+  woFiltered=APP.wos.filter(w=>(woStatus==='ALL'||w.status===woStatus)&&(!mo||w.must_leave.startsWith(mo))&&(!cu||w.customer===cu)&&(!s||[w.wo,w.part,w.wc,w.customer].some(v=>String(v).toLowerCase().includes(s)))&&(yearFilter==='all'||validPfx.has(w.must_leave.slice(0,7))));
   woFiltered.sort((a,b)=>{let av=a[woSortCol],bv=b[woSortCol];if(typeof av==='string')return av.localeCompare(bv)*woSortDir;return(av-bv)*woSortDir;});
   woPage=1;renderWO();
 }
