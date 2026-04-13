@@ -38,6 +38,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 .up-chip:hover{border-color:var(--accent);color:var(--accent);}
 .up-chip input{display:none;}
 .up-status{font-size:.7rem;font-family:var(--mono);color:var(--accent);}
+/* Sync badge */
+.sync-badge{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:var(--bg2);font-size:.65rem;color:var(--text3);font-family:var(--mono);}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--text3);}
+.sync-dot.live{background:var(--green);box-shadow:0 0 6px var(--green);}
+.sync-dot.loading{background:var(--yellow);animation:pulse .8s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
 #app{display:flex;height:calc(100vh - 58px);}
 #sidebar{width:220px;min-width:220px;background:var(--bg1);border-right:1px solid var(--border);overflow-y:auto;padding:12px 8px;flex-shrink:0;}
 #main-content{flex:1;overflow-y:auto;padding:20px;}
@@ -162,6 +168,21 @@ tbody td{padding:7px 10px;color:var(--text2);vertical-align:middle;}
 .up-res{margin-top:10px;padding:9px 12px;border-radius:var(--r);font-family:var(--mono);font-size:.72rem;display:none;}
 .up-ok{background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.3);}
 .up-err{background:rgba(239,68,68,.1);color:var(--red);border:1px solid rgba(239,68,68,.3);}
+/* Dataset selector */
+.ds-picker{display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:10px 14px;background:var(--bg1);border:1px solid var(--border);border-radius:var(--rl);}
+.ds-picker select{flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:6px 10px;color:var(--text);font-size:.75rem;font-family:var(--mono);outline:none;}
+.ds-picker select:focus{border-color:var(--accent);}
+.ds-picker label{font-size:.65rem;font-family:var(--head);font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);white-space:nowrap;}
+.ds-del-btn{padding:5px 10px;border-radius:var(--r);border:1px solid rgba(239,68,68,.4);background:rgba(239,68,68,.08);color:var(--red);font-size:.7rem;cursor:pointer;font-family:var(--mono);transition:all .2s;}
+.ds-del-btn:hover{background:rgba(239,68,68,.18);border-color:var(--red);}
+/* Persist notice */
+.persist-notice{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:var(--r);background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);margin-bottom:16px;font-size:.72rem;color:var(--green);font-family:var(--mono);}
+/* Global loading overlay */
+#global-loading{position:fixed;inset:0;z-index:600;background:rgba(7,9,15,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;backdrop-filter:blur(4px);}
+#global-loading.hidden{display:none;}
+.gl-spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.gl-text{font-family:var(--mono);font-size:.8rem;color:var(--text2);}
 #tip{position:fixed;z-index:999;background:var(--bg2);border:1px solid var(--accent);border-radius:var(--rl);padding:10px 14px;pointer-events:none;opacity:0;transition:opacity .12s;box-shadow:0 8px 32px rgba(0,0,0,.6);max-width:250px;font-size:.74rem;}
 #tip .t-wc{font-family:var(--head);font-weight:700;color:var(--accent);font-size:.9rem;margin-bottom:3px;}
 #tip .t-mo{font-family:var(--mono);color:var(--text3);font-size:.65rem;margin-bottom:8px;}
@@ -208,6 +229,13 @@ tbody td{padding:7px 10px;color:var(--text2);vertical-align:middle;}
 </style>
 </head>
 <body>
+
+<!-- Global loading overlay -->
+<div id="global-loading">
+  <div class="gl-spinner"></div>
+  <div class="gl-text" id="gl-msg">Loading latest data…</div>
+</div>
+
 <div id="header">
   <div class="logo-zone">
     <div class="logo-icon">AM</div>
@@ -226,16 +254,10 @@ tbody td{padding:7px 10px;color:var(--text2);vertical-align:middle;}
     <button class="nav-btn" data-view="upload" onclick="setView('upload')"><span class="nav-icon">📤</span>Upload Data</button>
   </div>
   <div class="header-right">
-    <label class="up-chip" title="Upload Available Hours">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      Capacity
-      <input type="file" accept=".xlsx" onchange="handleUpload(event,'cap')"/>
-    </label>
-    <label class="up-chip" title="Upload WC Loaded Hours">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      Load Hrs
-      <input type="file" accept=".xlsx" onchange="handleUpload(event,'load')"/>
-    </label>
+    <div class="sync-badge" id="sync-badge">
+      <div class="sync-dot" id="sync-dot"></div>
+      <span id="sync-txt">Connecting…</span>
+    </div>
     <span class="up-status" id="up-status"></span>
   </div>
 </div>
@@ -264,7 +286,7 @@ tbody td{padding:7px 10px;color:var(--text2);vertical-align:middle;}
 <!-- HEAT MAP -->
 <div class="view active" id="view-heatmap">
   <div class="kpi-row" id="kpi-row"></div>
-  <div class="sec-head"><div class="sec-title">Utilization Heat Map</div><div class="sec-line"></div><div class="sec-meta" id="hm-meta">Upload data to begin</div></div>
+  <div class="sec-head"><div class="sec-title">Utilization Heat Map</div><div class="sec-line"></div><div class="sec-meta" id="hm-meta">Loading…</div></div>
   <div class="toolbar">
     <span class="tb-label">Group</span>
     <button class="tb-btn active" data-grp="axis" onclick="setHeatGrp(this)">By Axis</button>
@@ -280,7 +302,7 @@ tbody td{padding:7px 10px;color:var(--text2);vertical-align:middle;}
     <button class="yr-btn" data-yr="2027" onclick="setYearFilter('2027')">2027</button>
     <input class="tb-search" id="hm-search" placeholder="Search WC…" oninput="buildHeatMap()" style="margin-left:auto"/>
   </div>
-  <div id="heatmap-body"><div class="empty-state"><div class="es-icon">🌡️</div><div class="es-title">No Data Loaded</div><div class="es-sub">Upload your Capacity and Load Hours files to view the utilization heat map.</div><button class="es-btn" onclick="setView('upload')">Go to Upload →</button></div></div>
+  <div id="heatmap-body"><div class="empty-state"><div class="es-icon">🌡️</div><div class="es-title">Loading Data…</div><div class="es-sub">Fetching from server.</div></div></div>
   <div class="legend" id="heat-legend"></div>
 </div>
 
@@ -289,21 +311,21 @@ tbody td{padding:7px 10px;color:var(--text2);vertical-align:middle;}
   <div class="sec-head"><div class="sec-title">Work Center Gauges</div><div class="sec-line"></div><div class="sec-meta">Select month to view utilization dials</div></div>
   <div class="month-nav" id="wc-month-nav"></div>
   <div class="toolbar" id="wc-axis-toolbar"><span class="tb-label">Filter</span><button class="tb-btn active" data-gaxis="ALL" onclick="filterGaugeAxis(this,'wc')">All</button></div>
-  <div id="wc-gauge-body"><div class="empty-state"><div class="es-icon">⚡</div><div class="es-title">No Data Loaded</div><div class="es-sub">Upload your files to view work center gauges.</div><button class="es-btn" onclick="setView('upload')">Go to Upload →</button></div></div>
+  <div id="wc-gauge-body"><div class="empty-state"><div class="es-icon">⚡</div><div class="es-title">Loading…</div></div></div>
 </div>
 
 <!-- AXIS GAUGES -->
 <div class="view" id="view-gauge-axis">
   <div class="sec-head"><div class="sec-title">Utilization by Axis</div><div class="sec-line"></div><div class="sec-meta">Aggregated capacity &amp; load per axis group per month</div></div>
   <div class="month-nav" id="axis-month-nav"></div>
-  <div id="axis-gauge-body"><div class="empty-state"><div class="es-icon">🔷</div><div class="es-title">No Data Loaded</div><div class="es-sub">Upload your files to view axis gauges.</div><button class="es-btn" onclick="setView('upload')">Go to Upload →</button></div></div>
+  <div id="axis-gauge-body"><div class="empty-state"><div class="es-icon">🔷</div><div class="es-title">Loading…</div></div></div>
 </div>
 
 <!-- TYPE GAUGES -->
 <div class="view" id="view-gauge-type">
   <div class="sec-head"><div class="sec-title">Utilization by Machine Type</div><div class="sec-line"></div><div class="sec-meta">Aggregated capacity &amp; load per machine type per month</div></div>
   <div class="month-nav" id="type-month-nav"></div>
-  <div id="type-gauge-body"><div class="empty-state"><div class="es-icon">🔩</div><div class="es-title">No Data Loaded</div><div class="es-sub">Upload your files to view type gauges.</div><button class="es-btn" onclick="setView('upload')">Go to Upload →</button></div></div>
+  <div id="type-gauge-body"><div class="empty-state"><div class="es-icon">🔩</div><div class="es-title">Loading…</div></div></div>
 </div>
 
 <!-- CUSTOMER -->
@@ -329,8 +351,8 @@ tbody td{padding:7px 10px;color:var(--text2);vertical-align:middle;}
     <button class="yr-btn" data-yr="2027" onclick="setYearFilter('2027')">2027</button>
     <input class="tb-search" id="cust-search" placeholder="Search customer…" oninput="buildCustHeat()" style="margin-left:auto"/>
   </div>
-  <div class="sec-head"><div class="sec-title">Customer Loaded Hours</div><div class="sec-line"></div><div class="sec-meta" id="cust-meta">Upload data to begin</div></div>
-  <div id="cust-body"><div class="empty-state"><div class="es-icon">👥</div><div class="es-title">No Data Loaded</div><div class="es-sub">Upload your Load Hours file to view customer data.</div><button class="es-btn" onclick="setView('upload')">Go to Upload →</button></div></div>
+  <div class="sec-head"><div class="sec-title">Customer Loaded Hours</div><div class="sec-line"></div><div class="sec-meta" id="cust-meta">Loading…</div></div>
+  <div id="cust-body"><div class="empty-state"><div class="es-icon">👥</div><div class="es-title">Loading…</div></div></div>
 </div>
 
 <!-- WO SCHEDULE -->
@@ -350,32 +372,47 @@ tbody td{padding:7px 10px;color:var(--text2);vertical-align:middle;}
     <span id="wo-cnt" style="font-size:.65rem;color:var(--text3);font-family:var(--mono);margin-left:auto;"></span>
   </div>
   <div class="sec-head"><div class="sec-title">Work Order Schedule</div><div class="sec-line"></div></div>
-  <div id="wo-body"><div class="empty-state"><div class="es-icon">📋</div><div class="es-title">No Data Loaded</div><div class="es-sub">Upload your Load Hours file to view work orders.</div><button class="es-btn" onclick="setView('upload')">Go to Upload →</button></div></div>
+  <div id="wo-body"><div class="empty-state"><div class="es-icon">📋</div><div class="es-title">Loading…</div></div></div>
   <div class="pag" id="wo-pag"></div>
 </div>
 
 <!-- UPLOAD -->
 <div class="view" id="view-upload">
   <div class="up-view">
+    <div class="persist-notice">
+      🔒 Data is saved to the server database — all team members see the same live data on every refresh.
+    </div>
+
+    <!-- Dataset selector -->
+    <div class="ds-picker" id="ds-picker-wrap">
+      <label>Active Dataset</label>
+      <select id="ds-select" onchange="switchDataset()"></select>
+      <button class="ds-del-btn" onclick="deleteDataset()">Delete</button>
+    </div>
+
     <div class="kpi-row" style="margin-bottom:20px">
-      <div class="kpi-card ok"><div class="kpi-label">Data Status</div><div class="kpi-value" style="font-size:1.1rem" id="up-src">No Data</div><div class="kpi-sub">Current session</div></div>
+      <div class="kpi-card ok"><div class="kpi-label">Data Status</div><div class="kpi-value" style="font-size:1.1rem" id="up-src">Loading…</div><div class="kpi-sub">From server database</div></div>
       <div class="kpi-card"><div class="kpi-label">Work Centers</div><div class="kpi-value" id="up-wc-n">—</div><div class="kpi-sub">from capacity file</div></div>
       <div class="kpi-card"><div class="kpi-label">Work Orders</div><div class="kpi-value" id="up-wo-n">—</div><div class="kpi-sub">active + expected</div></div>
       <div class="kpi-card"><div class="kpi-label">Months</div><div class="kpi-value" id="up-mo-n">—</div><div class="kpi-sub">in horizon</div></div>
     </div>
+
     <div class="up-card">
       <h3>📋 Step 1 — Available Hours (Capacity File)</h3>
-      <p>Upload <code>Production_Available_Hours</code> — must contain a <code>Raw Data</code> sheet with columns: Work Center, Type, Axis, Effective Capacity-[Mon YY]…</p>
+      <p>Upload <code>Production_Available_Hours</code> — must contain a <code>Raw Data</code> sheet with columns: Work Center, Type, Axis, Effective Capacity-[Mon YY]…<br><br>
+      <strong style="color:var(--accent)">This creates a new dataset version.</strong> A dataset name will be auto-generated from today's date.</p>
       <div class="drop-z" id="dz-cap" onclick="document.getElementById('f-cap').click()" ondragover="dzOver(event,'dz-cap')" ondragleave="dzOut('dz-cap')" ondrop="dzDrop(event,'cap')">
         <input type="file" id="f-cap" accept=".xlsx" onchange="handleUpload(event,'cap')"/>
         <div class="drop-icon">📊</div>
-        <div class="drop-txt">Drag &amp; drop or <span>browse</span> · .xlsx</div>
+        <div class="drop-txt" id="dz-cap-txt">Drag &amp; drop or <span>browse</span> · .xlsx</div>
       </div>
       <div class="up-res" id="res-cap"></div>
     </div>
-    <div class="up-card">
+
+    <div class="up-card" id="load-card">
       <h3>⏱ Step 2 — WC Loaded Hours File</h3>
-      <p>Upload <code>Results_WC_LOADED_HOUR</code> — required columns: Work Order #, Work Center, Customer, WO Must Leave By, Status, Set-up Time (Hrs), Hours:Current Target.</p>
+      <p>Upload <code>Results_WC_LOADED_HOUR</code> — required columns: Work Order #, Work Center, Customer, WO Must Leave By, Status, Set-up Time (Hrs), Hours:Current Target.<br><br>
+      <strong style="color:var(--gold)" id="load-card-note">Upload capacity file first to create a dataset.</strong></p>
       <div class="drop-z" id="dz-load" onclick="document.getElementById('f-load').click()" ondragover="dzOver(event,'dz-load')" ondragleave="dzOut('dz-load')" ondrop="dzDrop(event,'load')">
         <input type="file" id="f-load" accept=".xlsx" onchange="handleUpload(event,'load')"/>
         <div class="drop-icon">🔄</div>
@@ -383,7 +420,7 @@ tbody td{padding:7px 10px;color:var(--text2);vertical-align:middle;}
       </div>
       <div class="up-res" id="res-load"></div>
     </div>
-    <p style="text-align:center;color:var(--text3);font-size:.72rem;">All processing is done locally in your browser — no data leaves your machine.</p>
+    <p style="text-align:center;color:var(--text3);font-size:.72rem;">Data is stored in PostgreSQL on Railway and shared with your entire team.</p>
   </div>
 </div>
 
@@ -400,7 +437,6 @@ tbody td{padding:7px 10px;color:var(--text2);vertical-align:middle;}
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 // ── APP STATE ──────────────────────────────────────
 let APP = { wcs:[], customers:[], wos:[], months:[], types:[], axes:[] };
@@ -415,7 +451,257 @@ let woSortCol='must_leave', woSortDir=1;
 let activeView='heatmap';
 let sidebarAxisFlt='ALL', sidebarSearch_val='';
 let yearFilter='all';
-let capLoaded=false, loadLoaded=false;
+
+// ── API STATE ──────────────────────────────────────
+let currentDatasetId = null;
+let allDatasets = [];
+
+// ── API BASE ───────────────────────────────────────
+// Auto-detect: use same origin so this works on Railway or localhost
+const API_BASE = '';
+
+async function apiFetch(path, opts={}) {
+  const res = await fetch(API_BASE + path, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({error: res.statusText}));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+// ── INIT — fetch latest data on page load ──────────
+async function initApp() {
+  showGlobalLoading('Connecting to database…');
+  try {
+    // Load dataset list
+    await refreshDatasetList();
+
+    // Load latest data
+    const data = await apiFetch('/api/datasets/latest/data');
+    if (data.dataset) {
+      currentDatasetId = data.dataset.id;
+      loadAppData(data);
+      setSyncStatus('live', `Dataset: ${data.dataset.name}`);
+    } else {
+      setSyncStatus('offline', 'No data — upload files');
+    }
+  } catch(e) {
+    setSyncStatus('offline', 'Server unreachable');
+    console.error('Init error:', e);
+  }
+  hideGlobalLoading();
+  rebuildAll();
+}
+
+function loadAppData(data) {
+  const { months, wcs, wos } = data;
+  APP.months = months || [];
+  APP.wcs = wcs || [];
+  APP.wos = wos || [];
+
+  // Rebuild customer aggregation from WOs
+  rebuildCustomers();
+
+  APP.axes = [...new Set(APP.wcs.map(w => w.axis).filter(Boolean))];
+  APP.types = [...new Set(APP.wcs.map(w => w.type).filter(Boolean))];
+
+  // Update upload view stats
+  document.getElementById('up-wc-n').textContent = APP.wcs.length || '—';
+  document.getElementById('up-wo-n').textContent = APP.wos.length || '—';
+  document.getElementById('up-mo-n').textContent = APP.months.length || '—';
+  document.getElementById('up-src').textContent = APP.wcs.length ? 'Live Data ✓' : 'No Data';
+
+  if (currentDatasetId) {
+    document.getElementById('load-card-note').textContent = 'Dataset ready — upload load file to update hours.';
+    document.getElementById('load-card-note').style.color = 'var(--green)';
+  }
+}
+
+function rebuildCustomers() {
+  const custMap = {};
+  const months = APP.months;
+
+  APP.wos.forEach(wo => {
+    const c = wo.customer || 'Unknown';
+    if (!custMap[c]) {
+      custMap[c] = { customer: c, total: 0, months: months.map(m => ({ label: m, load: 0, wcs: [] })) };
+    }
+    // find month index by matching must_leave date prefix to month label
+    const ml = wo.must_leave || '';
+    const dt = new Date(ml + 'T12:00:00');
+    const moLabel = months.find(m => {
+      const parts = m.split(' ');
+      const yr = 2000 + parseInt(parts[1]);
+      const mn = new Date(Date.parse(parts[0] + ' 1 2000')).getMonth() + 1;
+      return dt.getFullYear() === yr && (dt.getMonth() + 1) === mn;
+    });
+    if (!moLabel) return;
+    const mi = months.indexOf(moLabel);
+    if (mi < 0) return;
+    const tot = (parseFloat(wo.setup) || 0) + (parseFloat(wo.target) || 0);
+    custMap[c].months[mi].load += tot;
+    custMap[c].total += tot;
+    const wce = custMap[c].months[mi].wcs.find(x => x.wc === wo.wc);
+    if (wce) wce.load += tot; else custMap[c].months[mi].wcs.push({ wc: wo.wc, load: tot });
+  });
+
+  APP.customers = Object.values(custMap).sort((a, b) => b.total - a.total);
+}
+
+// ── DATASET MANAGEMENT ─────────────────────────────
+async function refreshDatasetList() {
+  try {
+    allDatasets = await apiFetch('/api/datasets');
+    renderDatasetSelect();
+  } catch(e) { console.error('Dataset list error:', e); }
+}
+
+function renderDatasetSelect() {
+  const sel = document.getElementById('ds-select');
+  if (!allDatasets.length) {
+    sel.innerHTML = '<option value="">No datasets yet</option>';
+    return;
+  }
+  sel.innerHTML = allDatasets.map(d => {
+    const date = new Date(d.updated_at).toLocaleDateString();
+    return `<option value="${d.id}" ${d.id === currentDatasetId ? 'selected' : ''}>${d.name} (${date})</option>`;
+  }).join('');
+}
+
+async function switchDataset() {
+  const id = parseInt(document.getElementById('ds-select').value);
+  if (!id || id === currentDatasetId) return;
+  showGlobalLoading('Loading dataset…');
+  try {
+    const data = await apiFetch(`/api/datasets/${id}/data`);
+    currentDatasetId = id;
+    loadAppData(data);
+    setSyncStatus('live', `Dataset: ${data.dataset.name}`);
+    rebuildAll();
+  } catch(e) {
+    setUpStatus('✗ ' + e.message, false);
+  }
+  hideGlobalLoading();
+}
+
+async function deleteDataset() {
+  if (!currentDatasetId) return;
+  if (!confirm('Delete this dataset? This cannot be undone.')) return;
+  try {
+    await apiFetch(`/api/datasets/${currentDatasetId}`, { method: 'DELETE' });
+    currentDatasetId = null;
+    await refreshDatasetList();
+    // Load next available dataset
+    if (allDatasets.length) {
+      const data = await apiFetch(`/api/datasets/${allDatasets[0].id}/data`);
+      currentDatasetId = allDatasets[0].id;
+      loadAppData(data);
+      renderDatasetSelect();
+      rebuildAll();
+    } else {
+      APP = { wcs:[], customers:[], wos:[], months:[], types:[], axes:[] };
+      rebuildAll();
+      setSyncStatus('offline', 'No data — upload files');
+    }
+  } catch(e) {
+    alert('Delete failed: ' + e.message);
+  }
+}
+
+// ── FILE UPLOAD → API ──────────────────────────────
+function dzOver(e, id) { e.preventDefault(); document.getElementById(id).classList.add('on'); }
+function dzOut(id) { document.getElementById(id).classList.remove('on'); }
+function dzDrop(e, type) { e.preventDefault(); dzOut(type === 'cap' ? 'dz-cap' : 'dz-load'); const f = e.dataTransfer.files[0]; if (f) processFile(f, type); }
+function handleUpload(e, type) { const f = e.target.files[0]; if (f) processFile(f, type); }
+
+async function processFile(file, type) {
+  setUpStatus('⟳ Uploading…', null);
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  if (type === 'cap') {
+    // Generate a name based on file name + date
+    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    fd.append('name', `MPS – ${today}`);
+    fd.append('uploaded_by', 'user');
+
+    try {
+      const res = await apiFetch('/api/upload/capacity', { method: 'POST', body: fd });
+      currentDatasetId = res.dataset_id;
+      showUpRes('cap', true, `✓ ${res.wcs} work centers saved to database`);
+      setUpStatus('✓ Saved', true);
+      document.getElementById('load-card-note').textContent = 'Dataset ready — now upload load file.';
+      document.getElementById('load-card-note').style.color = 'var(--green)';
+      await refreshDatasetList();
+      renderDatasetSelect();
+      // Refresh data
+      const data = await apiFetch(`/api/datasets/${currentDatasetId}/data`);
+      loadAppData(data);
+      setSyncStatus('live', `Dataset: ${data.dataset.name}`);
+      rebuildAll();
+    } catch(e) {
+      showUpRes('cap', false, e.message);
+      setUpStatus('✗ Error', false);
+    }
+
+  } else {
+    // Load hours upload — needs a dataset_id
+    if (!currentDatasetId) {
+      showUpRes('load', false, 'Upload capacity file first to create a dataset.');
+      setUpStatus('✗ No dataset', false);
+      return;
+    }
+    fd.append('dataset_id', currentDatasetId);
+
+    try {
+      const res = await apiFetch('/api/upload/load', { method: 'POST', body: fd });
+      showUpRes('load', true, `✓ ${res.wos} work orders saved to database`);
+      setUpStatus('✓ Saved', true);
+      // Refresh data
+      const data = await apiFetch(`/api/datasets/${currentDatasetId}/data`);
+      loadAppData(data);
+      setSyncStatus('live', `Dataset: ${data.dataset.name}`);
+      await refreshDatasetList();
+      rebuildAll();
+    } catch(e) {
+      showUpRes('load', false, e.message);
+      setUpStatus('✗ Error', false);
+    }
+  }
+}
+
+function showUpRes(type, ok, msg) {
+  const id = type === 'cap' ? 'res-cap' : 'res-load';
+  const el = document.getElementById(id);
+  el.className = 'up-res ' + (ok ? 'up-ok' : 'up-err');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function setUpStatus(msg, ok) {
+  const el = document.getElementById('up-status');
+  el.textContent = msg;
+  el.style.color = ok === null ? 'var(--yellow)' : ok ? 'var(--green)' : 'var(--red)';
+  if (ok !== null) setTimeout(() => { el.textContent = ''; }, 4000);
+}
+
+// ── SYNC STATUS ────────────────────────────────────
+function setSyncStatus(state, txt) {
+  const dot = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-txt');
+  dot.className = 'sync-dot ' + (state === 'live' ? 'live' : state === 'loading' ? 'loading' : '');
+  label.textContent = txt;
+}
+
+// ── GLOBAL LOADING ─────────────────────────────────
+function showGlobalLoading(msg) {
+  document.getElementById('gl-msg').textContent = msg || 'Loading…';
+  document.getElementById('global-loading').classList.remove('hidden');
+}
+function hideGlobalLoading() {
+  document.getElementById('global-loading').classList.add('hidden');
+}
 
 // ── YEAR FILTER ────────────────────────────────────
 function getFilteredMonths(){
@@ -500,7 +786,12 @@ function setView(id){
   else if(id==='gauge-type')buildTypeGauges();
   else if(id==='customer'){buildCustKPIs();buildCustHeat();}
   else if(id==='wo'){buildWOHeaders();filterWO();}
-  else if(id==='upload'){document.getElementById('up-wc-n').textContent=APP.wcs.length||'—';document.getElementById('up-wo-n').textContent=APP.wos.length||'—';document.getElementById('up-mo-n').textContent=APP.months.length||'—';}
+  else if(id==='upload'){
+    document.getElementById('up-wc-n').textContent=APP.wcs.length||'—';
+    document.getElementById('up-wo-n').textContent=APP.wos.length||'—';
+    document.getElementById('up-mo-n').textContent=APP.months.length||'—';
+    refreshDatasetList();
+  }
 }
 
 // ── SIDEBAR ────────────────────────────────────────
@@ -542,7 +833,7 @@ function buildKPIs(){
 function setHeatGrp(btn){document.querySelectorAll('[data-grp]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');heatGrp=btn.dataset.grp;buildHeatMap();}
 function setHeatShow(btn){document.querySelectorAll('[data-hshow]').forEach(b=>b.classList.remove('active'));btn.classList.add('active');heatShow=btn.dataset.hshow;buildHeatMap();}
 function buildHeatMap(){
-  if(!APP.wcs.length){document.getElementById('heatmap-body').innerHTML='<div class="empty-state"><div class="es-icon">🌡️</div><div class="es-title">No Data Loaded</div><div class="es-sub">Upload your Capacity and Load Hours files.</div><button class="es-btn" onclick="setView(\'upload\')">Go to Upload →</button></div>';document.getElementById('heat-legend').innerHTML='';document.getElementById('hm-meta').textContent='Upload data to begin';return;}
+  if(!APP.wcs.length){document.getElementById('heatmap-body').innerHTML='<div class="empty-state"><div class="es-icon">🌡️</div><div class="es-title">No Data Loaded</div><div class="es-sub">Go to Upload and add your Capacity and Load Hours files.</div><button class="es-btn" onclick="setView(\'upload\')">Go to Upload →</button></div>';document.getElementById('heat-legend').innerHTML='';document.getElementById('hm-meta').textContent='No data';return;}
   const search=document.getElementById('hm-search').value.toLowerCase();
   const mos=getFilteredMonths();
   const moIdx=mos.map(m=>APP.months.indexOf(m));
@@ -569,7 +860,7 @@ function buildHeatMap(){
         const col=uColor(m.util);
         const disp=heatShow==='util'?(m.util===null?'—':pct(m.util)):(m.load>0?(m.load>=1000?(m.load/1000).toFixed(1)+'k':Math.round(m.load)):'·');
         const isnull=m.util===null;
-        html+=`<td class="u-cell${isnull?' u-null':''}" style="${isnull?'':'background:'+col.bg+';color:'+col.text}" onmouseenter="showHeatTip(event,'${esc(wc.wc)}','${m.label}',${m.cap},${m.load},${m.util})" onmouseleave="hideTip()">${disp}</td>`;
+        html+=`<td class="u-cell${isnull?' u-null':''}" style="${isnull?'':'background:'+col.bg+';color:'+col.text}" onmouseenter="showHeatTip(event,'${esc(wc.wc)}','${m.label||mos[ci]}',${m.cap},${m.load},${m.util})" onmouseleave="hideTip()">${disp}</td>`;
       });
       html+='</tr>';
     });
@@ -612,7 +903,7 @@ function setWCGaugeMonth(m){wcGaugeMonth=m;buildWCGauges();}
 function buildWCGauges(rebuildNav=true){
   const mos=getFilteredMonths();
   const bodyEl=document.getElementById('wc-gauge-body');
-  if(!APP.wcs.length){document.getElementById('wc-month-nav').innerHTML='';bodyEl.innerHTML='<div class="empty-state"><div class="es-icon">⚡</div><div class="es-title">No Data Loaded</div><div class="es-sub">Upload your files to view work center gauges.</div><button class="es-btn" onclick="setView(\'upload\')">Go to Upload →</button></div>';return;}
+  if(!APP.wcs.length){document.getElementById('wc-month-nav').innerHTML='';bodyEl.innerHTML='<div class="empty-state"><div class="es-icon">⚡</div><div class="es-title">No Data Loaded</div><div class="es-sub">Upload files to view work center gauges.</div><button class="es-btn" onclick="setView(\'upload\')">Go to Upload →</button></div>';return;}
   if(!wcGaugeMonth||!mos.includes(wcGaugeMonth))wcGaugeMonth=mos[3]||mos[0];
   if(rebuildNav)buildMonthNav('wc-month-nav',wcGaugeMonth,'setWCGaugeMonth');
   const axes=['ALL',...(APP.axes||[...new Set(APP.wcs.map(w=>w.axis))])];
@@ -648,7 +939,7 @@ function setAxisGaugeMonth(m){axisGaugeMonth=m;buildAxisGauges();}
 function buildAxisGauges(rebuildNav=true){
   const mos=getFilteredMonths();
   const bodyEl=document.getElementById('axis-gauge-body');
-  if(!APP.wcs.length){document.getElementById('axis-month-nav').innerHTML='';bodyEl.innerHTML='<div class="empty-state"><div class="es-icon">🔷</div><div class="es-title">No Data Loaded</div><div class="es-sub">Upload your files first.</div><button class="es-btn" onclick="setView(\'upload\')">Go to Upload →</button></div>';return;}
+  if(!APP.wcs.length){document.getElementById('axis-month-nav').innerHTML='';bodyEl.innerHTML='<div class="empty-state"><div class="es-icon">🔷</div><div class="es-title">No Data Loaded</div><button class="es-btn" onclick="setView(\'upload\')">Go to Upload →</button></div>';return;}
   if(!axisGaugeMonth||!mos.includes(axisGaugeMonth))axisGaugeMonth=mos[3]||mos[0];
   if(rebuildNav)buildMonthNav('axis-month-nav',axisGaugeMonth,'setAxisGaugeMonth');
   const moIdx=APP.months.indexOf(axisGaugeMonth);
@@ -667,7 +958,7 @@ function setTypeGaugeMonth(m){typeGaugeMonth=m;buildTypeGauges();}
 function buildTypeGauges(rebuildNav=true){
   const mos=getFilteredMonths();
   const bodyEl=document.getElementById('type-gauge-body');
-  if(!APP.wcs.length){document.getElementById('type-month-nav').innerHTML='';bodyEl.innerHTML='<div class="empty-state"><div class="es-icon">🔩</div><div class="es-title">No Data Loaded</div><div class="es-sub">Upload your files first.</div><button class="es-btn" onclick="setView(\'upload\')">Go to Upload →</button></div>';return;}
+  if(!APP.wcs.length){document.getElementById('type-month-nav').innerHTML='';bodyEl.innerHTML='<div class="empty-state"><div class="es-icon">🔩</div><div class="es-title">No Data Loaded</div><button class="es-btn" onclick="setView(\'upload\')">Go to Upload →</button></div>';return;}
   if(!typeGaugeMonth||!mos.includes(typeGaugeMonth))typeGaugeMonth=mos[3]||mos[0];
   if(rebuildNav)buildMonthNav('type-month-nav',typeGaugeMonth,'setTypeGaugeMonth');
   const moIdx=APP.months.indexOf(typeGaugeMonth);
@@ -741,7 +1032,7 @@ function buildCustHeat(){
       const m=c.months[mi]||{load:0,wcs:[],label:mos[ci]};
       const col=cHeat(m.load,maxV);const isZ=m.load===0;
       const lbl=isZ?'·':(m.load>=1000?(m.load/1000).toFixed(1)+'k':Math.round(m.load));
-      html+=`<td class="c-cell" style="background:${isZ?'#07090f':col.bg};color:${isZ?'#1e2a40':col.text}" onclick="openDD('${esc(c.customer)}','${m.label}',${ri},${mi})" onmouseenter="showCTip(event,'${esc(c.customer)}','${m.label}',${m.load},${c.total})" onmouseleave="hideTip()"><div>${lbl}</div>${!isZ?`<div style="width:${Math.round(m.load/rm*60)}%;height:3px;background:${col.text}50;margin:2px auto 0;border-radius:2px;max-width:56px"></div>`:''}</td>`;
+      html+=`<td class="c-cell" style="background:${isZ?'#07090f':col.bg};color:${isZ?'#1e2a40':col.text}" onclick="openDD('${esc(c.customer)}','${m.label||mos[ci]}',${ri},${mi})" onmouseenter="showCTip(event,'${esc(c.customer)}','${m.label||mos[ci]}',${m.load},${c.total})" onmouseleave="hideTip()"><div>${lbl}</div>${!isZ?`<div style="width:${Math.round(m.load/rm*60)}%;height:3px;background:${col.text}50;margin:2px auto 0;border-radius:2px;max-width:56px"></div>`:''}</td>`;
     });
     html+='</tr>';
   });
@@ -770,7 +1061,6 @@ const WO_COLS=[{k:'wo',lbl:'WO #'},{k:'part',lbl:'Part #'},{k:'wc',lbl:'Work Cen
 function buildWOHeaders(){
   const bodyEl=document.getElementById('wo-body');
   if(!APP.wos.length){bodyEl.innerHTML='<div class="empty-state"><div class="es-icon">📋</div><div class="es-title">No Data Loaded</div><div class="es-sub">Upload your Load Hours file to view work orders.</div><button class="es-btn" onclick="setView(\'upload\')">Go to Upload →</button></div>';document.getElementById('wo-pag').innerHTML='';document.getElementById('wo-cnt').textContent='';return false;}
-  // rebuild month select filtered by year
   const validPfx=new Set();
   getFilteredMonths().forEach(m=>{const pts=m.split(' ');const yr=2000+parseInt(pts[1]);const mn=new Date(Date.parse(pts[0]+' 1 2000')).getMonth()+1;validPfx.add(`${yr}-${String(mn).padStart(2,'0')}`);});
   const allMos=[...new Set(APP.wos.map(w=>w.must_leave.slice(0,7)))].sort().filter(k=>yearFilter==='all'||validPfx.has(k));
@@ -790,7 +1080,7 @@ function filterWO(){
   const cu=document.getElementById('wo-cust-sel').value;
   const validPfx=new Set();
   getFilteredMonths().forEach(m=>{const pts=m.split(' ');const yr=2000+parseInt(pts[1]);const mn=new Date(Date.parse(pts[0]+' 1 2000')).getMonth()+1;validPfx.add(`${yr}-${String(mn).padStart(2,'0')}`);});
-  woFiltered=APP.wos.filter(w=>(woStatus==='ALL'||w.status===woStatus)&&(!mo||w.must_leave.startsWith(mo))&&(!cu||w.customer===cu)&&(!s||[w.wo,w.part,w.wc,w.customer].some(v=>v.toLowerCase().includes(s)))&&(yearFilter==='all'||validPfx.has(w.must_leave.slice(0,7))));
+  woFiltered=APP.wos.filter(w=>(woStatus==='ALL'||w.status===st)&&(!mo||w.must_leave.startsWith(mo))&&(!cu||w.customer===cu)&&(!s||[w.wo,w.part,w.wc,w.customer].some(v=>String(v).toLowerCase().includes(s)))&&(yearFilter==='all'||validPfx.has(w.must_leave.slice(0,7))));
   woFiltered.sort((a,b)=>{let av=a[woSortCol],bv=b[woSortCol];if(typeof av==='string')return av.localeCompare(bv)*woSortDir;return(av-bv)*woSortDir;});
   woPage=1;renderWO();
 }
@@ -800,7 +1090,7 @@ function renderWO(){
   document.getElementById('wo-cnt').textContent=`${total.toLocaleString()} orders`;
   const maxLoad=Math.max(...sl.map(w=>w.total),1);
   const thead=`<table class="wo-tbl"><thead><tr>${WO_COLS.map(c=>`<th onclick="sortWO('${c.k}')">${c.lbl}<span class="sort-arr${woSortCol===c.k?' on':''}">${woSortCol===c.k?(woSortDir===1?'↑':'↓'):'↕'}</span></th>`).join('')}</tr></thead><tbody>`;
-  const tbody=sl.map(w=>`<tr><td style="font-family:var(--mono);font-size:.7rem">${w.wo}</td><td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.69rem" title="${w.part}">${w.part}</td><td style="font-family:var(--mono);font-size:.66rem;white-space:nowrap">${w.wc}</td><td style="font-size:.7rem;white-space:nowrap">${w.customer}</td><td style="text-align:right;font-family:var(--mono);font-size:.7rem">${w.qty}</td><td style="font-family:var(--mono);font-size:.7rem">${w.must_leave}</td><td style="font-family:var(--mono);font-size:.7rem">${w.cust_due||''}</td><td><span class="badge b-${w.status.toLowerCase()}">${w.status}</span></td><td style="text-align:right;font-family:var(--mono);font-size:.7rem">${fmt(w.setup,2)}</td><td style="text-align:right;font-family:var(--mono);font-size:.7rem">${fmt(w.target,2)}</td><td style="min-width:100px"><div class="pct-bar-wrap"><div class="pct-bar-bg"><div class="pct-bar-fill" style="width:${Math.round(w.total/maxLoad*100)}%;background:var(--accent)"></div></div><div class="pct-lbl" style="color:var(--text)">${fmt(w.total,1)}</div></div></td></tr>`).join('');
+  const tbody=sl.map(w=>`<tr><td style="font-family:var(--mono);font-size:.7rem">${w.wo}</td><td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.69rem" title="${w.part}">${w.part}</td><td style="font-family:var(--mono);font-size:.66rem;white-space:nowrap">${w.wc}</td><td style="font-size:.7rem;white-space:nowrap">${w.customer}</td><td style="text-align:right;font-family:var(--mono);font-size:.7rem">${w.qty}</td><td style="font-family:var(--mono);font-size:.7rem">${w.must_leave}</td><td style="font-family:var(--mono);font-size:.7rem">${w.cust_due||''}</td><td><span class="badge b-${(w.status||'').toLowerCase()}">${w.status}</span></td><td style="text-align:right;font-family:var(--mono);font-size:.7rem">${fmt(w.setup,2)}</td><td style="text-align:right;font-family:var(--mono);font-size:.7rem">${fmt(w.target,2)}</td><td style="min-width:100px"><div class="pct-bar-wrap"><div class="pct-bar-bg"><div class="pct-bar-fill" style="width:${Math.round(w.total/maxLoad*100)}%;background:var(--accent)"></div></div><div class="pct-lbl" style="color:var(--text)">${fmt(w.total,1)}</div></div></td></tr>`).join('');
   document.getElementById('wo-body').innerHTML=`<div class="tbl-wrap">${thead}${tbody}</tbody></table></div>`;
   let pag=`<span class="pag-info">Pg ${woPage}/${pages} · ${total.toLocaleString()}</span>`;
   pag+=`<button class="pag-btn" onclick="goPage(1)" ${woPage===1?'disabled':''}>«</button>`;
@@ -813,114 +1103,6 @@ function renderWO(){
 }
 function goPage(p){woPage=p;renderWO();}
 
-// ── FILE UPLOAD ────────────────────────────────────
-function dzOver(e,id){e.preventDefault();document.getElementById(id).classList.add('on');}
-function dzOut(id){document.getElementById(id).classList.remove('on');}
-function dzDrop(e,type){e.preventDefault();dzOut(type==='cap'?'dz-cap':'dz-load');const f=e.dataTransfer.files[0];if(f)processFile(f,type);}
-function handleUpload(e,type){const f=e.target.files[0];if(f)processFile(f,type);}
-function processFile(file,type){
-  document.getElementById('up-status').textContent='⟳ Parsing…';
-  const r=new FileReader();
-  r.onload=ev=>{
-    try{
-      const wb=XLSX.read(ev.target.result,{type:'array',cellDates:true});
-      if(type==='cap')parseCap(wb);
-      else parseLoad(wb);
-      rebuildAll();
-      document.getElementById('up-status').textContent='✓ Updated';
-      setTimeout(()=>document.getElementById('up-status').textContent='',3000);
-      document.getElementById('up-src').textContent='Live Data';
-      document.getElementById('up-wc-n').textContent=APP.wcs.length;
-      document.getElementById('up-wo-n').textContent=APP.wos.length;
-      document.getElementById('up-mo-n').textContent=APP.months.length;
-    }catch(err){
-      document.getElementById('up-status').textContent='✗ Error';
-      showUpRes(type,false,err.message);
-      console.error(err);
-    }
-  };
-  r.readAsArrayBuffer(file);
-}
-
-function parseCap(wb){
-  const sn=wb.SheetNames.find(s=>s.toLowerCase().includes('raw'))||wb.SheetNames[0];
-  const data=XLSX.utils.sheet_to_json(wb.Sheets[sn],{defval:''});
-  if(!data.length)throw new Error('Empty sheet');
-  // Detect month columns — anything matching pattern like "Jan 26" or "Effective Capacity-Jan 26"
-  const sample=data[0];
-  const moRe=/^(?:Effective Capacity-)?([A-Za-z]{3})\s+(\d{2})$/;
-  const moCols=Object.keys(sample).filter(k=>moRe.test(k.trim()));
-  const months=moCols.map(k=>{const m=k.trim().match(moRe);return`${m[1].charAt(0).toUpperCase()+m[1].slice(1).toLowerCase()} ${m[2]}`;});
-  APP.months=months;
-  const newWCs=data.filter(r=>r['Work Center']).map(r=>{
-    const wc=String(r['Work Center']).trim();
-    return{wc,type:String(r['Type']||'').trim(),axis:String(r['Axis']||'').trim(),
-      months:months.map((m,i)=>({label:m,cap:parseFloat(r[moCols[i]])||0,load:0,util:null}))};
-  });
-  // preserve existing loads if wc names match
-  const lm={};APP.wcs.forEach(w=>{lm[w.wc]={};w.months.forEach(m=>{lm[w.wc][m.label]=m.load;});});
-  newWCs.forEach(w=>w.months.forEach(m=>{const l=(lm[w.wc]&&lm[w.wc][m.label])||0;m.load=l;m.util=m.cap>0?l/m.cap:null;}));
-  APP.wcs=newWCs;
-  APP.axes=[...new Set(newWCs.map(w=>w.axis).filter(Boolean))];
-  APP.types=[...new Set(newWCs.map(w=>w.type).filter(Boolean))];
-  capLoaded=true;
-  showUpRes('cap',true,`${newWCs.length} work centers, ${months.length} months`);
-}
-
-function parseLoad(wb){
-  const data=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',cellDates:true});
-  if(!data.length)throw new Error('Empty sheet');
-  const months=APP.months.length?APP.months:[];
-  // Build period map
-  const pMap={};
-  months.forEach(m=>{const pts=m.split(' ');const yr=2000+parseInt(pts[1]);const mn=new Date(Date.parse(pts[0]+' 1 2000')).getMonth()+1;pMap[m]=`${yr}-${String(mn).padStart(2,'0')}`;});
-  const loadAgg={};const newWOs=[];
-  const custAgg={};
-  data.forEach(r=>{
-    const st=String(r['Status']||'').trim();
-    if(!['Active','Expected'].includes(st))return;
-    const wc=String(r['Work Center']||'').trim();
-    const raw=r['WO Must Leave By'];
-    if(!wc||!raw)return;
-    let dt;
-    if(raw instanceof Date)dt=raw;
-    else if(typeof raw==='number'){const d=XLSX.SSF.parse_date_code(raw);dt=new Date(d.y,d.m-1,d.d);}
-    else dt=new Date(raw);
-    if(!dt||isNaN(dt))return;
-    const period=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
-    const lbl=Object.keys(pMap).find(k=>pMap[k]===period);
-    if(!lbl)return;
-    const setup=parseFloat(r['Set-up Time (Hrs)'])||0;
-    const tgt=parseFloat(r['Hours:Current Target'])||0;
-    const tot=setup+tgt;
-    const customer=String(r['Customer']||'').trim();
-    if(!loadAgg[wc])loadAgg[wc]={};
-    loadAgg[wc][lbl]=(loadAgg[wc][lbl]||0)+tot;
-    // customer agg
-    if(!custAgg[customer])custAgg[customer]={customer,total:0,months:months.map(m=>({label:m,load:0,wcs:[]}))};
-    const mi=months.indexOf(lbl);
-    if(mi>=0){
-      custAgg[customer].months[mi].load+=tot;
-      custAgg[customer].total+=tot;
-      const wce=custAgg[customer].months[mi].wcs.find(x=>x.wc===wc);
-      if(wce)wce.load+=tot;else custAgg[customer].months[mi].wcs.push({wc,load:tot});
-    }
-    const due=r['Cust. Due'];let dueStr='';
-    if(due instanceof Date)dueStr=due.toISOString().slice(0,10);
-    else if(typeof due==='number'){const d2=XLSX.SSF.parse_date_code(due);dueStr=d2?`${d2.y}-${String(d2.m).padStart(2,'0')}-${String(d2.d).padStart(2,'0')}`:''}
-    else dueStr=String(due||'').slice(0,10);
-    newWOs.push({wo:String(r['Work Order #']||''),part:String(r['Part #']||'').slice(0,70),wc,customer,qty:String(r['QtyOrdered']||r['Qty']||''),must_leave:dt.toISOString().slice(0,10),cust_due:dueStr||'',status:st,setup:Math.round(setup*100)/100,target:Math.round(tgt*100)/100,total:Math.round(tot*100)/100});
-  });
-  // apply loads to wcs
-  APP.wcs.forEach(wc=>wc.months.forEach(m=>{const l=(loadAgg[wc.wc]&&loadAgg[wc.wc][m.label])||0;m.load=l;m.util=m.cap>0?l/m.cap:null;}));
-  APP.wos=newWOs;
-  APP.customers=Object.values(custAgg).sort((a,b)=>b.total-a.total);
-  loadLoaded=true;
-  showUpRes('load',true,`${newWOs.length} work orders · ${APP.customers.length} customers`);
-}
-
-function showUpRes(type,ok,msg){const id=type==='cap'?'res-cap':'res-load';const el=document.getElementById(id);el.className='up-res '+(ok?'up-ok':'up-err');el.textContent=(ok?'✓ ':'✗ ')+msg;el.style.display='block';}
-
 // ── REBUILD ALL ────────────────────────────────────
 function rebuildAll(){
   buildKPIs();buildSidebar();
@@ -932,8 +1114,8 @@ function rebuildAll(){
   else if(activeView==='wo'){buildWOHeaders();filterWO();}
 }
 
-// ── INIT ───────────────────────────────────────────
-buildKPIs();buildSidebar();
+// ── BOOT ────────────────────────────────────────────
+initApp();
 </script>
 </body>
 </html>
