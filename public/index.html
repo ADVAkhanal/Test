@@ -636,9 +636,16 @@ async function processFile(file, type) {
     fd.append('uploaded_by', 'user');
 
     try {
+      // Delete all old datasets before creating a new one so stale data never shows
+      const oldDatasets = await apiFetch('/api/datasets');
+      for (const old of oldDatasets) {
+        await apiFetch(`/api/datasets/${old.id}`, { method: 'DELETE' });
+      }
+
       const res = await apiFetch('/api/upload/capacity', { method: 'POST', body: fd });
       currentDatasetId = res.dataset_id;
-      showUpRes('cap', true, `✓ ${res.wcs} work centers saved to database`);
+      const moCount = res.months || '?';
+      showUpRes('cap', true, `✓ ${res.wcs} work centers · ${moCount} months detected · saved to database`);
       setUpStatus('✓ Saved', true);
       document.getElementById('load-card-note').textContent = 'Dataset ready — now upload load file.';
       document.getElementById('load-card-note').style.color = 'var(--green)';
@@ -647,7 +654,7 @@ async function processFile(file, type) {
       // Refresh data
       const data = await apiFetch(`/api/datasets/${currentDatasetId}`);
       loadAppData(data);
-      setSyncStatus('live', `Dataset: ${data.dataset.name}`);
+      setSyncStatus('live', `Dataset: ${data.dataset.name} · ${moCount} months`);
       rebuildAll();
     } catch(e) {
       showUpRes('cap', false, e.message);
@@ -813,7 +820,7 @@ function buildSidebar(){
   let tL=0,tC=0,ov=0;
   APP.wcs.forEach(wc=>wc.months.forEach(m=>{tL+=m.load;tC+=m.cap;if(m.util!==null&&m.util>=1)ov++;}));
   const avg=tC>0?tL/tC:0;
-  document.getElementById('sb-stats').innerHTML=`WCs: ${APP.wcs.length}<br>Months: ${APP.months.length}<br>Avg Util: ${Math.round(avg*100)}%<br>Over-Cap: ${ov} cells`;
+  document.getElementById('sb-stats').innerHTML=`WCs: ${APP.wcs.length}<br>Months: ${APP.months.length}${APP.months.length ? ` (${APP.months[0]}→${APP.months[APP.months.length-1]})` : ''}<br>Avg Util: ${Math.round(avg*100)}%<br>Over-Cap: ${ov} cells`;
   document.getElementById('cnt-all').textContent=APP.wcs.length;
 }
 function sidebarAxisFilter(btn){document.querySelectorAll('#sidebar .filter-chip').forEach(b=>b.classList.remove('active'));btn.classList.add('active');sidebarAxisFlt=btn.dataset.axis;buildHeatMap();if(activeView==='gauge-wc')buildWCGauges();}
